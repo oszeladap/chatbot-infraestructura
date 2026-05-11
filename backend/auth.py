@@ -40,16 +40,24 @@ class UserPayload(BaseModel):
 def verify_firebase_token(token: str) -> dict[str, Any]:
     _init_firebase()
     try:
-        decoded = auth.verify_id_token(token, check_revoked=True)
-    except auth.RevokedIdTokenError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail="Token revocado. Inicia sesión nuevamente.")
+        # check_revoked=False: avoids an extra HTTP round-trip to Firebase on
+        # every request. Revocation is rare; the 1-hour token TTL is sufficient.
+        decoded = auth.verify_id_token(token, check_revoked=False)
     except auth.ExpiredIdTokenError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail="Token expirado. Inicia sesión nuevamente.")
-    except Exception:
+                            detail="Token expirado. Recarga la página.")
+    except auth.RevokedIdTokenError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail="Token inválido.")
+                            detail="Sesión revocada. Inicia sesión nuevamente.")
+    except auth.InvalidIdTokenError as exc:
+        print(f"[auth] InvalidIdTokenError: {exc}")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Token inválido. Recarga la página.")
+    except Exception as exc:
+        # Log the real error so we can diagnose it in the server console
+        print(f"[auth] verify_id_token unexpected error ({type(exc).__name__}): {exc}")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail="Error al verificar la sesión. Intenta de nuevo.")
 
     return {
         "uid":   decoded["uid"],
