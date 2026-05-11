@@ -21,6 +21,7 @@ export default function AdminPanel() {
 
   const [users,     setUsers]     = useState([])
   const [loading,   setLoading]   = useState(true)
+  const [loadError, setLoadError] = useState(null)
   const [search,    setSearch]    = useState('')
   const [filter,    setFilter]    = useState('all')
   const [pending,   setPending]   = useState({})   // uid → selected role string
@@ -30,18 +31,22 @@ export default function AdminPanel() {
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type })
-    setTimeout(() => setToast(null), 3000)
+    setTimeout(() => setToast(null), 4000)
   }
 
   const loadUsers = useCallback(async () => {
     setLoading(true)
+    setLoadError(null)
     try {
       const res = await apiFetch('/admin/users')
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.detail ?? `HTTP ${res.status}`)
+      }
       const data = await res.json()
       setUsers(data.users ?? [])
     } catch (err) {
-      showToast(`Error al cargar usuarios: ${err.message}`, 'error')
+      setLoadError(err.message)
     } finally {
       setLoading(false)
     }
@@ -129,6 +134,21 @@ export default function AdminPanel() {
           <div className="admin-loading">
             <span className="spinner" />
             Cargando usuarios…
+          </div>
+        ) : loadError ? (
+          <div className="admin-load-error">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="2">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <div>
+              <strong>No se pudo cargar la lista de usuarios</strong>
+              <p>{loadError}</p>
+              <p style={{ fontSize: '.78rem', marginTop: 6 }}>
+                Si acabas de recibir el rol <strong>admin</strong>, cierra sesión y vuelve a entrar para que el token se actualice.
+              </p>
+            </div>
+            <button className="btn-apply" onClick={loadUsers} style={{ marginLeft: 'auto' }}>Reintentar</button>
           </div>
         ) : (
           <table className="admin-table">

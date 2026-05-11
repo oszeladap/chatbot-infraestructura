@@ -128,7 +128,7 @@ def health() -> HealthResponse:
     "/chat",
     response_model=ChatResponse,
     tags=["chat"],
-    dependencies=[Depends(require_role(["assistant_user"]))],
+    dependencies=[Depends(require_role(["assistant_user", "admin"]))],
 )
 def chat(
     body: ChatRequest,
@@ -136,7 +136,7 @@ def chat(
 ) -> ChatResponse:
     """Send a message to the agent and persist both turns to Firestore.
 
-    Requires role: ``assistant_user``.
+    Requires role: ``assistant_user`` or ``admin``.
     """
     uid = user["uid"]
     session_id = body.session_id or str(uuid.uuid4())
@@ -182,16 +182,16 @@ def chat(
     "/history",
     response_model=HistoryResponse,
     tags=["chat"],
-    dependencies=[Depends(require_role(["assistant_user", "viewer"]))],
+    dependencies=[Depends(require_role(["assistant_user", "viewer", "admin"]))],
 )
 def get_history(
     user: CurrentUser,
-    uid: Annotated[str | None, Query(description="UID objetivo (sólo para viewers)")] = None,
+    uid: Annotated[str | None, Query(description="UID objetivo (admin/viewer pueden inspeccionar cualquier sesión)")] = None,
 ) -> HistoryResponse:
     """Return the full message history for a user session.
 
     - ``assistant_user``: always receives their own history (``uid`` param ignored).
-    - ``viewer`` / ``admin``: may pass a ``uid`` query param to inspect any session.
+    - ``viewer`` / ``admin``: can pass a ``uid`` query param; defaults to own history.
     """
     role = user.get("role")
     target_uid: str
@@ -201,10 +201,8 @@ def get_history(
     elif uid:
         target_uid = uid
     else:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Los viewers deben indicar un uid en el query param.",
-        )
+        # admin/viewer with no uid → show own history
+        target_uid = user["uid"]
 
     try:
         messages = fs.get_session_history(target_uid)
@@ -222,12 +220,12 @@ def get_history(
     "/history",
     response_model=DeleteResponse,
     tags=["chat"],
-    dependencies=[Depends(require_role(["assistant_user"]))],
+    dependencies=[Depends(require_role(["assistant_user", "admin"]))],
 )
 def delete_history(user: CurrentUser) -> DeleteResponse:
     """Clear message history while preserving the user profile.
 
-    Requires role: ``assistant_user``.
+    Requires role: ``assistant_user`` or ``admin``.
     """
     try:
         fs.clear_session(user["uid"])
@@ -257,12 +255,12 @@ def get_profile(user: CurrentUser) -> ProfileResponse:
     "/profile",
     response_model=ProfileResponse,
     tags=["user"],
-    dependencies=[Depends(require_role(["assistant_user"]))],
+    dependencies=[Depends(require_role(["assistant_user", "admin"]))],
 )
 def update_profile(body: ProfileUpdateRequest, user: CurrentUser) -> ProfileResponse:
     """Update editable profile fields (nombre, preferencias, notas).
 
-    Requires role: ``assistant_user``.
+    Requires role: ``assistant_user`` or ``admin``.
     """
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if updates:

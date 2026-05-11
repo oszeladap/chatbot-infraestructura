@@ -105,6 +105,15 @@
   gap: 12px; padding: 40px; color: var(--text-muted); font-size: .9rem;
 }
 
+/* ── Load error ── */
+.admin-load-error {
+  display: flex; align-items: flex-start; gap: 14px;
+  margin: 24px; padding: 20px 24px; border-radius: 12px;
+  background: #FEF2F2; border: 1px solid #FECACA; color: #7F1D1D;
+}
+.admin-load-error strong { display: block; font-size: .95rem; margin-bottom: 4px; }
+.admin-load-error p { font-size: .82rem; margin: 0; }
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
   .admin-table-wrap { padding: 10px; }
