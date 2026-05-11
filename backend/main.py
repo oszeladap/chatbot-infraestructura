@@ -26,6 +26,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.middleware.base import BaseHTTPMiddleware
 
 import agent as agent_module
 import firestore_service as fs
@@ -43,6 +44,15 @@ app = FastAPI(
     description="API REST para el asistente de transporte aéreo y terrestre en Perú.",
     version="2.0.0",
 )
+
+
+class _NoCacheHtmlMiddleware(BaseHTTPMiddleware):
+    """Inject no-cache headers on HTML responses so browsers always fetch the latest index.html."""
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        if "text/html" in response.headers.get("content-type", ""):
+            response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        return response
 
 app.add_middleware(
     CORSMiddleware,
@@ -356,26 +366,15 @@ def admin_delete_user(uid: str, user: CurrentUser) -> DeleteResponse:
 
 # ---------------------------------------------------------------------------
 # Static files — prefer built React dist, fall back to raw frontend dir
-# Must be mounted LAST so API routes take priority
+# Must be mounted LAST so API routes take priority.
+# html=True enables SPA fallback (all unknown paths serve index.html).
+# No-cache for HTML is handled by _NoCacheHtmlMiddleware above.
 # ---------------------------------------------------------------------------
 _frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
 _frontend_src = Path(__file__).parent.parent / "frontend"
 _serve_dir = _frontend_dist if _frontend_dist.exists() else _frontend_src
 
-# Serve index.html with no-cache so browsers always get the latest JS references.
-# JS/CSS assets are safe to cache (they have content-hash filenames).
-@app.get("/", include_in_schema=False)
-@app.get("/{full_path:path}", include_in_schema=False)
-async def serve_spa(full_path: str = ""):
-    from fastapi.responses import FileResponse, Response
-    # Let API routes take priority (they are registered before this catch-all)
-    index = _serve_dir / "index.html"
-    if not index.exists():
-        return Response("Frontend not built", status_code=503)
-    return FileResponse(
-        str(index),
-        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
-    )
+app.add_middleware(_NoCacheHtmlMiddleware)
 
 if _serve_dir.exists():
-    app.mount("/assets", StaticFiles(directory=str(_serve_dir / "assets")), name="assets")
+    app.mount("/", StaticFiles(directory=str(_serve_dir), html=True), name="frontend")
