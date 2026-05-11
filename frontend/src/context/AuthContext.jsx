@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { onAuthStateChanged } from 'firebase/auth'
 import { auth } from '../firebase'
 
@@ -36,10 +36,10 @@ export function AuthProvider({ children }) {
     return unsub
   }, [])
 
-  const getToken = async () => {
+  const getToken = useCallback(async () => {
     if (!firebaseUser) throw new Error('AUTH_NULL: Sin usuario autenticado. Recarga la página.')
     return firebaseUser.getIdToken(false)
-  }
+  }, [firebaseUser])
 
   return (
     <AuthContext.Provider value={{ firebaseUser, role, loading, getToken }}>
