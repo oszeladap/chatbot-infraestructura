@@ -216,6 +216,10 @@
   display: flex; align-items: center; gap: 4px; flex-shrink: 0;
 }
 .btn-header:hover { background: rgba(255,255,255,.28); }
+.btn-header-gold {
+  background: rgba(232,184,75,.25); border-color: rgba(232,184,75,.5); color: #FFE08A;
+}
+.btn-header-gold:hover { background: rgba(232,184,75,.4); }
 
 /* ══════════════════════════════════════════════
    NAV TABS

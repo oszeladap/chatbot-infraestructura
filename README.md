@@ -15,34 +15,107 @@ Asistente conversacional especializado en viajes dentro del Perú. Permite a los
 - **Hospedaje** — hoteles, hostales y alojamientos con rangos de precio y alternativas por ciudad.
 - **Gastronomía y transporte local** — restaurantes típicos, precios de menú, taxi, Uber y transporte urbano en destino.
 - **Atracciones turísticas** — museos, plazas, ruinas, miradores y tours con costos de entrada.
-- **☁️ Clima siempre presente** — cada respuesta con ciudad destino incluye automáticamente temperatura, precipitaciones y recomendaciones para la fecha de consulta o la fecha futura indicada.
-- **Fecha de referencia automática** — el asistente considera siempre la fecha actual para temporadas, disponibilidad y precios vigentes. Si la consulta especifica un mes o fecha futura, se usa esa como referencia.
+- **Clima siempre presente** — cada respuesta con ciudad destino incluye automáticamente temperatura, precipitaciones y recomendaciones para la fecha de consulta o la fecha futura indicada.
+- **Fecha de referencia automática** — el asistente considera siempre la fecha actual para temporadas, disponibilidad y precios vigentes.
 
 ### Interfaz de usuario
+- **Historial de chats por sesión** — cada conversación se guarda en Firestore con ID basado en fecha/hora (`YYYYMMDD_HHmmss_mmm`). Se puede navegar entre chats anteriores desde el sidebar.
+- **Sidebar desplegable** — panel lateral con lista de conversaciones anteriores, vista previa del texto y contador de mensajes. Se abre/cierra con el botón hamburguesa.
 - **Renderizado markdown enriquecido** — tablas de precios con colores, negritas, listas, encabezados y bloques de código renderizados visualmente.
 - **Chips de categoría automáticos** — cada respuesta detecta su tema principal y muestra un chip con emoji e ícono de color: ✈️ Transporte, 🏨 Hospedaje, 🍽️ Alimentación, 🗺️ Turismo, ☁️ Clima.
 - **Burbujas de colores por tema** — el fondo de cada respuesta varía según la categoría detectada.
 - **Fuentes web clicables** — los enlaces `[Fuente: url]` se convierten en botones navegables.
 - **Búsqueda web en vivo** — Tavily obtiene información actualizada; el badge 🔍 indica cuándo se usó.
+- **Diseño responsive** — adaptado a escritorio, tablet y móvil. En pantallas pequeñas el sidebar se convierte en overlay con backdrop.
 
-### Exportación PDF profesional
-Al pulsar el botón **PDF** se genera un documento con:
-- **Portada** con fondo rojo/dorado peruano, título del sistema, fecha, hora y usuario.
-- **5 secciones en tablas coloreadas:**
+### Exportación PDF — dos modos
+
+#### Reporte Detallado (botón PDF)
+Documento completo con todas las conversaciones organizadas por tema:
+- **Portada** con fondo azul/dorado peruano, título del sistema, fecha, hora y usuario.
+- **Secciones por tema** (solo aparecen si hay contenido relevante):
   1. ✈️ Costos de Viaje en Vuelo y Bus — Comparativas
-  2. 🏨 Costos de Hospedaje — Alternativas
-  3. 🍽️ Costos de Alimentación y Transporte Local
-  4. 🗺️ Lugares que Visitar y sus Costos
-  5. ☁️ Datos del Clima en Ciudad Destino
-- Cada sección muestra únicamente los intercambios relevantes a ese tema.
+  2. ☁️ Datos del Clima en Ciudad Destino
+  3. 🏨 Costos de Hospedaje — Alternativas
+  4. 🍽️ Costos de Alimentación y Transporte Local
+  5. 🗺️ Lugares que Visitar y sus Costos
+  6. ℹ️ Otros Datos de Interés para el Turista
+- Cada Q/A aparece en **una sola sección** (primera coincidencia gana).
 - **Pie de página** en cada hoja con número de página y nombre del sistema.
 
+#### Resumen Ejecutivo (botón Resumen)
+Documento condensado de **máximo 2 páginas** con la información más importante:
+- Encabezado compacto con fecha y usuario.
+- Prioriza: condiciones climáticas, comparativa de costos económico vs. cómodo en transporte y hospedaje, lugares destacados y consejos clave.
+- Fuente y márgenes reducidos para máxima densidad de información.
+- Ideal para imprimir y llevar de referencia rápida al viaje.
+
 ### Gestión y administración
-- **Historial persistente** — sesiones guardadas en Firestore, recuperadas al iniciar.
+- **Historial persistente** — chats guardados en la subcollection Firestore `sessions/{uid}/chats/{chat_id}`, recuperados al iniciar.
+- **Auto-guardado** — cada mensaje se persiste automáticamente; al crear nuevo chat el anterior queda guardado en el sidebar.
 - **Control de acceso por roles** — `assistant_user`, `viewer` y `admin` con distintos niveles de acceso.
 - **Panel de administración** — los usuarios con rol `admin` acceden a una pestaña para listar todos los usuarios, asignar/cambiar roles y eliminar cuentas.
 - **Perfil de usuario** — nombre, preferencias de viaje, notas y fecha del último ingreso.
-- **Sidebar de historial** — panel lateral desplegable con vista previa de conversaciones anteriores.
+
+---
+
+## Ejemplos de preguntas
+
+Estas son las formas recomendadas para obtener respuestas completas y bien estructuradas del asistente:
+
+### Transporte aéreo
+```
+¿Cuáles son los vuelos de Lima a Cusco este fin de semana? ¿Cuánto cuestan en LATAM y Sky?
+¿Hay vuelos directos de Lima a Iquitos? ¿Cuál es la aerolínea más económica?
+¿Cuánto cuesta un vuelo Lima-Arequipa para el próximo mes? Compara las opciones disponibles.
+```
+
+### Transporte terrestre
+```
+¿Cuánto cuesta el bus de Lima a Arequipa con Cruz del Sur? ¿Y con Oltursa o Tepsa?
+¿Cómo llego de Cusco a Puno en bus? ¿Cuánto tiempo tarda y cuánto cuesta?
+¿Cuál es la diferencia de precio entre el bus económico y el bus cama de Lima a Trujillo?
+```
+
+### Hospedaje
+```
+¿Cuánto cuesta un hostal económico en el centro de Cusco? ¿Y un hotel 4 estrellas?
+Busca opciones de alojamiento en Miraflores, Lima, desde lo más económico hasta hoteles de lujo.
+¿Hay alojamientos cerca de Machu Picchu? ¿Cuáles son los precios en Aguas Calientes?
+```
+
+### Gastronomía y costos locales
+```
+¿Qué restaurantes económicos hay en Miraflores? ¿Cuánto sale el menú del día?
+¿Cuánto cuesta comer en un restaurante típico en Cusco? Dame opciones económicas y otras más cómodas.
+¿Cuánto cobran los taxis en Lima del aeropuerto al centro? ¿Y Uber?
+```
+
+### Atracciones turísticas
+```
+¿Cuáles son los mejores lugares para visitar en Cusco y cuánto cuesta la entrada?
+¿Cuánto vale el boleto turístico de Cusco? ¿Qué lugares incluye?
+¿Qué tours hay disponibles en Arequipa? ¿Cuánto cuesta el tour al Colca?
+```
+
+### Clima
+```
+¿Cómo está el clima en Cusco en julio? ¿Hace mucho frío? ¿Llueve?
+¿Cuál es la mejor época para visitar Machu Picchu? ¿Qué temperatura hace?
+¿Cómo es el clima en Lima en diciembre? ¿Es buen momento para ir a la playa?
+```
+
+### Preguntas combinadas (mejor resultado)
+```
+Voy a viajar de Lima a Cusco el próximo mes. ¿Cuánto me costaría el vuelo, un hostal económico
+y las entradas a Machu Picchu? Incluye el clima esperado.
+
+Quiero comparar: ¿cuánto gastaría en un viaje de 3 días a Arequipa de forma económica vs. cómoda?
+Incluye transporte, hospedaje, comida y tour al Cañón del Colca.
+
+¿Qué debo saber antes de viajar a Cusco? Consejos sobre el soroche, documentos necesarios,
+cambio de moneda y seguridad.
+```
 
 ---
 
@@ -69,7 +142,7 @@ Al pulsar el botón **PDF** se genera un documento con:
 | **React** | 18 | Librería de interfaz de usuario |
 | **Vite** | 5 | Bundler y servidor de desarrollo |
 | **Firebase JS SDK** | 10 | Autenticación en el cliente |
-| **jsPDF** | 2.5 | Generación de PDF en el navegador |
+| **jsPDF** | 2.5 | Generación de PDF en el navegador (2 modos) |
 | **CSS Variables** | — | Tema peruano (rojo, dorado, azul andino) |
 
 ### Infraestructura
@@ -91,9 +164,9 @@ chatbot-infraestructura/
 ├── backend/                        # API REST (Python / FastAPI)
 │   ├── main.py                     # Entrypoint: rutas, middleware CORS, StaticFiles SPA
 │   ├── agent.py                    # Agente Mistral: prompt con fecha, clima obligatorio,
-│   │                               #   extracción de fechas, búsqueda Tavily (transporte + clima)
+│   │                               #   extracción de fechas, búsqueda Tavily
 │   ├── auth.py                     # Verificación de tokens Firebase y control de roles
-│   ├── firestore_service.py        # CRUD: historial de mensajes y perfiles de usuario
+│   ├── firestore_service.py        # CRUD: chats por sesión (subcollection) y perfiles
 │   ├── assign_role.py              # CLI para asignar roles directamente a usuarios Firebase
 │   ├── requirements.txt            # Dependencias Python
 │   └── .env.example                # Plantilla de variables de entorno (sin valores reales)
@@ -113,8 +186,8 @@ chatbot-infraestructura/
 │       │   └── useApi.js           # Hook apiFetch: Bearer token + retry en 401/403
 │       └── components/
 │           ├── Login.jsx / .css    # Pantalla de acceso (correo + Google OAuth)
-│           ├── Chat.jsx  / .css    # Interfaz principal: chat, tabs, PDF export, sidebar
-│           ├── Sidebar.jsx         # Panel lateral con historial de mensajes
+│           ├── Chat.jsx  / .css    # Interfaz principal: chat, tabs, PDF export (2 modos), sidebar
+│           ├── Sidebar.jsx         # Panel lateral con historial de chats por fecha/hora
 │           ├── MessageBubble.jsx   # Burbuja con renderizador markdown completo +
 │           │                       #   detección de sección + chip temático
 │           └── AdminPanel.jsx/.css # Panel de administración de usuarios y roles
@@ -123,6 +196,21 @@ chatbot-infraestructura/
 ├── railway.toml                    # Config Railway: builder Dockerfile, healthcheck /health
 ├── .dockerignore
 └── .gitignore
+```
+
+### Estructura Firestore
+
+```
+Firestore
+└── sessions/
+    └── {uid}/                      # Documento por usuario
+        ├── nombre, email, ...      # Perfil del usuario
+        └── chats/                  # Subcollección de chats
+            └── {YYYYMMDD_HHmmss_mmm}/   # Un documento por chat
+                ├── preview         # Primeras palabras del primer mensaje
+                ├── created_at      # Timestamp de creación
+                ├── message_count   # Total de mensajes en el chat
+                └── messages[]      # Array de {role, content, tokens, timestamp}
 ```
 
 ---
@@ -219,8 +307,8 @@ El repositorio incluye `Dockerfile` y `railway.toml` listos. Railway detecta aut
 Configura estas variables en el panel de Railway → **Variables**:
 
 ```
-MISTRAL_API_KEY        → tu clave Mistral (renovar si se expusieron)
-TAVILY_API_KEY         → tu clave Tavily (renovar si se expusieron)
+MISTRAL_API_KEY        → tu clave Mistral
+TAVILY_API_KEY         → tu clave Tavily
 FIREBASE_PROJECT_ID    → ID del proyecto Firebase
 GOOGLE_CREDENTIALS_JSON → service-account.json en Base64 (ver abajo)
 ```
@@ -264,9 +352,9 @@ python assign_role.py abc123uid assistant_user
 
 | Rol | Chat | Historial | Perfil | Admin |
 |---|---|---|---|---|
-| `assistant_user` | ✅ Enviar y recibir | ✅ Ver y borrar el propio | ✅ Ver y editar | ❌ |
-| `viewer` | ❌ | ✅ Ver cualquier usuario | ✅ Ver | ❌ |
-| `admin` | ✅ Enviar y recibir | ✅ Ver cualquier usuario | ✅ Ver y editar | ✅ Completo |
+| `assistant_user` | Enviar y recibir | Ver y borrar el propio | Ver y editar | No |
+| `viewer` | No | Ver cualquier usuario | Ver | No |
+| `admin` | Enviar y recibir | Ver cualquier usuario | Ver y editar | Completo |
 
 ---
 
@@ -276,7 +364,11 @@ python assign_role.py abc123uid assistant_user
 |---|---|---|---|
 | `GET` | `/health` | Público | Estado del servidor |
 | `POST` | `/chat` | `assistant_user`, `admin` | Enviar mensaje al asistente |
-| `GET` | `/history` | `assistant_user`, `viewer`, `admin` | Obtener historial |
+| `GET` | `/chats` | `assistant_user`, `viewer`, `admin` | Listar todos los chats del usuario |
+| `GET` | `/chats/{chat_id}` | `assistant_user`, `viewer`, `admin` | Obtener mensajes de un chat específico |
+| `DELETE` | `/chats/{chat_id}` | `assistant_user`, `admin` | Eliminar un chat específico |
+| `DELETE` | `/chats` | `assistant_user`, `admin` | Eliminar todos los chats del usuario |
+| `GET` | `/history` | `assistant_user`, `viewer`, `admin` | Historial plano (legacy) |
 | `DELETE` | `/history` | `assistant_user`, `admin` | Limpiar historial (preserva perfil) |
 | `GET` | `/profile` | Todos los roles | Ver perfil propio |
 | `PUT` | `/profile` | `assistant_user`, `admin` | Actualizar perfil |

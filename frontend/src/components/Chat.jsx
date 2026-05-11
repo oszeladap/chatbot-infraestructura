@@ -57,6 +57,8 @@ function normalizePDF(s) {
     .replace(/[☀-➿]/gu, '')
     .replace(/[℀-⅟]/gu, '')
     .replace(/[①-◿]/gu, '')
+    // Strip markdown syntax chars that may have escaped cleanTxt
+    .replace(/#/g, '')
     // Final strip: keep only Basic Latin + Latin-1 Supplement
     .replace(/[^\x20-\x7E\xA0-\xFF]/g, '')
     .replace(/\s+/g, ' ')
@@ -229,12 +231,20 @@ async function exportPDF(messages, userEmail) {
   let y = 122
 
   // ── SECCIONES ─────────────────────────────────────────────────────────────
+  // Climate is placed 2nd so its Q/A pairs are not captured by later sections
+  // (e.g. "Lugares" which matches "visitar/lugar" — common words in climate answers)
   const SECTIONS = [
     {
       title: 'COSTOS DE VIAJE EN VUELO Y BUS - COMPARATIVAS',
       sub:   'Tarifas aereas y terrestres con comparativa de operadores',
       hc: [21, 101, 160], rc: [235, 244, 255], ra: [215, 232, 255],
       rx: /vuelo|avio|aerolin|latam|sky|avianca|jetsmart|bus\b|cruz del sur|oltursa|tepsa|aeropuerto|terminal|boleto|pasaje|tarifa/i,
+    },
+    {
+      title: 'DATOS DEL CLIMA EN CIUDAD DESTINO',
+      sub:   'Condiciones meteorologicas, temperatura y recomendaciones',
+      hc: [14, 116, 144], rc: [236, 254, 255], ra: [207, 250, 254],
+      rx: /clima|temperatura|lluvia|sol\b|calor|fr[ií]o|humedad|viento|pron[oó]stico|meteorolog/i,
     },
     {
       title: 'COSTOS DE HOSPEDAJE — ALTERNATIVAS',
@@ -253,12 +263,6 @@ async function exportPDF(messages, userEmail) {
       sub:   'Atracciones turisticas, tours y actividades recomendadas',
       hc: [109, 40, 217], rc: [245, 243, 255], ra: [237, 233, 254],
       rx: /museo|plaza|parque|iglesia|catedral|ruinas|machu picchu|tour\b|excursion|mirador|atraccion|visitar|lugar/i,
-    },
-    {
-      title: 'DATOS DEL CLIMA EN CIUDAD DESTINO',
-      sub:   'Condiciones meteorologicas, temperatura y recomendaciones',
-      hc: [14, 116, 144], rc: [236, 254, 255], ra: [207, 250, 254],
-      rx: /clima|temperatura|lluvia|sol\b|calor|fr[ií]o|humedad|viento|pron[oó]stico|meteorolog/i,
     },
     {
       title: 'OTROS DATOS DE INTERES PARA EL TURISTA',
@@ -291,9 +295,11 @@ async function exportPDF(messages, userEmail) {
       }
     })
 
-    // Section header + subtitle must not be orphaned — keep together with first content
-    const secNeeded = 43 + (hits.length > 0 ? 60 : 22)
-    if (y + secNeeded > pageH - M) { doc.addPage(); y = M }
+    // Skip sections with no matching content — don't render header at all
+    if (hits.length === 0) continue
+
+    // Section header + subtitle must not be orphaned — keep together with first content block
+    if (y + 103 > pageH - M) { doc.addPage(); y = M }
 
     doc.setFillColor(...sec.hc)
     doc.rect(M, y, CW, 26, 'F')
@@ -310,17 +316,6 @@ async function exportPDF(messages, userEmail) {
     doc.setFontSize(7.5)
     doc.text(sec.sub, M + 8, y + 11)
     y += 17
-
-    if (hits.length === 0) {
-      doc.setFillColor(250, 250, 253)
-      doc.rect(M, y, CW, 22, 'F')
-      doc.setTextColor(160, 160, 180)
-      doc.setFont('helvetica', 'italic')
-      doc.setFontSize(8)
-      doc.text('Sin informacion disponible sobre este tema en la conversacion actual.', M + 8, y + 14)
-      y += 22 + 14
-      continue
-    }
 
     for (const pair of hits) {
       const qClean = cleanTxt(pair.q)
@@ -363,6 +358,177 @@ async function exportPDF(messages, userEmail) {
   }
 
   doc.save(`recomendaciones-viaje-peru-${now.toISOString().slice(0, 10)}.pdf`)
+}
+
+// ── PDF Resumen Ejecutivo (max 2 páginas) ─────────────────────────────────────
+async function exportPDFSummary(messages, userEmail) {
+  const { jsPDF } = await import('jspdf')
+  const doc   = new jsPDF({ unit: 'pt', format: 'a4' })
+  const pageW = doc.internal.pageSize.getWidth()
+  const pageH = doc.internal.pageSize.getHeight()
+  const M  = 32
+  const CW = pageW - M * 2
+  const LH = 9.5   // compact line height
+  const FS = 7     // compact body font size
+  let y = 0
+  let stopped = false
+
+  // Guard: returns true if there's room; opens a new page if possible (max 2 pages)
+  function fit(needed) {
+    if (stopped) return false
+    if (y + needed <= pageH - 24) return true
+    if (doc.internal.getNumberOfPages() >= 2) { stopped = true; return false }
+    doc.addPage(); y = M
+    return true
+  }
+
+  // ── Encabezado compacto ──────────────────────────────────────────────────
+  doc.setFillColor(30, 80, 150)
+  doc.rect(0, 0, pageW, 46, 'F')
+  doc.setFillColor(232, 184, 75)
+  doc.rect(0, 46, pageW, 4, 'F')
+
+  doc.setTextColor(255, 255, 255)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(13)
+  doc.text('RESUMEN EJECUTIVO DE VIAJE - PERU', M, 22)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(7)
+  const now     = new Date()
+  const dateStr = now.toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' })
+  const timeStr = now.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
+  doc.setTextColor(180, 200, 240)
+  doc.text(`Fecha: ${dateStr}  Hora: ${timeStr}  |  Usuario: ${userEmail ?? 'N/A'}  |  Sistema Inteligente de Viajes de Peru`, M, 40)
+
+  y = 60
+
+  // ── Pares Q/A ────────────────────────────────────────────────────────────
+  const pairs = []
+  for (let i = 0; i < messages.length; i++) {
+    if (messages[i].role === 'user' && !messages[i].isError) {
+      const next = messages[i + 1]
+      if (next?.role === 'assistant' && !next.isError) {
+        pairs.push({ q: messages[i].content ?? '', a: next.content ?? '' })
+      }
+    }
+  }
+
+  // Summary sections — climate and costs first for quick executive scanning
+  const SUM_SECS = [
+    {
+      title: 'CONDICIONES CLIMATICAS',
+      hc: [14, 116, 144], rc: [236, 254, 255],
+      max: 2,
+      rx: /clima|temperatura|lluvia|sol\b|calor|fr[ií]o|humedad|viento|pron[oó]stico|meteorolog/i,
+    },
+    {
+      title: 'COSTOS DE TRANSPORTE — COMPARATIVA ECONOMICO vs COMODO',
+      hc: [21, 101, 160], rc: [235, 244, 255],
+      max: 2,
+      rx: /vuelo|avio|aerolin|latam|sky|avianca|jetsmart|bus\b|cruz del sur|oltursa|tepsa|aeropuerto|terminal|boleto|pasaje|tarifa/i,
+    },
+    {
+      title: 'COSTOS DE HOSPEDAJE — COMPARATIVA ECONOMICO vs COMODO',
+      hc: [45, 106, 79], rc: [236, 253, 245],
+      max: 2,
+      rx: /hotel|hostal|hospedaje|alojamiento|habitaci|lodge|resort|airbnb|posada/i,
+    },
+    {
+      title: 'LUGARES Y ACTIVIDADES DESTACADAS',
+      hc: [109, 40, 217], rc: [245, 243, 255],
+      max: 1,
+      rx: /museo|plaza|parque|iglesia|catedral|ruinas|machu picchu|tour\b|excursion|mirador|atraccion|visitar|lugar/i,
+    },
+    {
+      title: 'RECOMENDACIONES Y DATOS CLAVE',
+      hc: [55, 65, 100], rc: [248, 250, 252],
+      max: 1,
+      rx: /seguridad|consejo|pasaporte|moneda|cambio.*sol|propina|vacuna|altitud|soroche|recomendaci/i,
+    },
+  ]
+
+  const usedIdxs = new Set()
+
+  for (const sec of SUM_SECS) {
+    if (stopped) break
+
+    const hits = []
+    pairs.forEach((p, idx) => {
+      if (!usedIdxs.has(idx) && sec.rx.test(p.q + ' ' + p.a)) {
+        hits.push(p); usedIdxs.add(idx)
+      }
+    })
+    if (hits.length === 0) continue
+
+    // Section header (20pt)
+    if (!fit(20)) break
+    doc.setFillColor(...sec.hc)
+    doc.rect(M, y, CW, 20, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8.5)
+    doc.text(sec.title, M + 6, y + 14)
+    y += 20
+
+    for (const pair of hits.slice(0, sec.max)) {
+      if (stopped) break
+
+      // Q compact bar
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(FS)
+      const qLines = doc.splitTextToSize(cleanTxt(pair.q), CW - 12)
+      const qH = Math.max(qLines.length * LH + 4, 14)
+      if (!fit(qH)) break
+      doc.setFillColor(210, 218, 238)
+      doc.rect(M, y, CW, qH, 'F')
+      doc.setTextColor(15, 25, 65)
+      doc.text(qLines, M + 6, y + 9)
+      y += qH
+
+      // Answer — condensed plain-text from blocks, max 10 rendered lines
+      const blocks = parseBlocks(pair.a)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(FS)
+      const flatLines = []
+      for (const b of blocks) {
+        if (b.type === 'table') {
+          for (const row of (b.rows ?? [])) {
+            const wrapped = doc.splitTextToSize(row.join('  |  '), CW - 12)
+            flatLines.push(...wrapped)
+          }
+        } else if (b.text) {
+          const prefix = b.type === 'bullet' ? '- ' : ''
+          const wrapped = doc.splitTextToSize(prefix + b.text, CW - 12)
+          flatLines.push(...wrapped)
+        }
+        if (flatLines.length >= 10) break
+      }
+      const aLines = flatLines.slice(0, 10)
+      const aH = aLines.length * LH + 6
+      if (!fit(aH)) break
+      doc.setFillColor(...sec.rc)
+      doc.rect(M, y, CW, aH, 'F')
+      doc.setTextColor(30, 40, 70)
+      doc.text(aLines, M + 6, y + 9)
+      y += aH + 3
+    }
+    y += 6
+  }
+
+  // ── Pie de página ────────────────────────────────────────────────────────
+  const total = doc.internal.getNumberOfPages()
+  for (let p = 1; p <= total; p++) {
+    doc.setPage(p)
+    doc.setFillColor(30, 80, 150)
+    doc.rect(0, pageH - 18, pageW, 18, 'F')
+    doc.setTextColor(200, 220, 255)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(6)
+    doc.text('Sistema Inteligente de Viajes de Peru  |  Resumen Ejecutivo', M, pageH - 5)
+    doc.text(`Pag. ${p} / ${total}`, pageW - M - 28, pageH - 5)
+  }
+
+  doc.save(`resumen-ejecutivo-peru-${now.toISOString().slice(0, 10)}.pdf`)
 }
 
 // ── IntiSun logo ──────────────────────────────────────────────────────────────
@@ -609,18 +775,30 @@ export default function Chat() {
               <span>Nuevo</span>
             </button>
 
-            {/* PDF — only when there are messages */}
+            {/* PDF buttons — only when there are messages */}
             {activeTab === 'chat' && messages.length > 0 && (
-              <button className="btn-header" onClick={() => exportPDF(messages, email)} title="Exportar PDF">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                     stroke="currentColor" strokeWidth="2.2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                  <polyline points="14 2 14 8 20 8"/>
-                  <line x1="12" y1="18" x2="12" y2="12"/>
-                  <line x1="9"  y1="15" x2="15" y2="15"/>
-                </svg>
-                <span>PDF</span>
-              </button>
+              <>
+                <button className="btn-header" onClick={() => exportPDF(messages, email)} title="Reporte detallado PDF">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                       stroke="currentColor" strokeWidth="2.2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="12" y1="18" x2="12" y2="12"/>
+                    <line x1="9"  y1="15" x2="15" y2="15"/>
+                  </svg>
+                  <span>PDF</span>
+                </button>
+                <button className="btn-header btn-header-gold" onClick={() => exportPDFSummary(messages, email)} title="Resumen ejecutivo PDF (max 2 hojas)">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                       stroke="currentColor" strokeWidth="2.2">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    <line x1="7" y1="8"  x2="17" y2="8"/>
+                    <line x1="7" y1="12" x2="14" y2="12"/>
+                    <line x1="7" y1="16" x2="11" y2="16"/>
+                  </svg>
+                  <span>Resumen</span>
+                </button>
+              </>
             )}
 
             {/* Borrar todos los chats */}
