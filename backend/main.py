@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import base64
+import os
+import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -7,6 +10,17 @@ from typing import Annotated, Any
 
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env")   # must run before any other local import
+
+# ---------------------------------------------------------------------------
+# Cloud credentials — decode GOOGLE_CREDENTIALS_JSON (base64) if present.
+# Needed on Railway / Docker where there is no local service-account file.
+# ---------------------------------------------------------------------------
+_creds_b64 = os.environ.get("GOOGLE_CREDENTIALS_JSON", "")
+if _creds_b64 and not os.path.isfile(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")):
+    _tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".json", mode="w")
+    _tmp.write(base64.b64decode(_creds_b64).decode())
+    _tmp.close()
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = _tmp.name
 
 from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware

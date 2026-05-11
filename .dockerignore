@@ -1,0 +1,12 @@
+.git
+.gitignore
+.claude
+.venv
+backend/.env
+backend/__pycache__
+backend/*.pyc
+service-account.json
+frontend/node_modules
+frontend/dist
+frontend/.vite
+*.md
