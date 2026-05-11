@@ -1,0 +1,116 @@
+.admin-root {
+  flex: 1; display: flex; flex-direction: column;
+  min-height: 0; overflow: hidden; background: var(--cream);
+}
+
+/* ── Toolbar ── */
+.admin-toolbar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 14px 20px;
+  background: #fff; border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.admin-search {
+  flex: 1; min-width: 180px; padding: 8px 13px;
+  border: 1.5px solid var(--border); border-radius: 8px;
+  font-size: .9rem; outline: none; transition: border-color .15s;
+}
+.admin-search:focus { border-color: var(--sky); }
+
+.admin-filter {
+  padding: 8px 12px; border: 1.5px solid var(--border); border-radius: 8px;
+  font-size: .875rem; outline: none; cursor: pointer; background: #fff;
+}
+
+.admin-count {
+  font-size: .82rem; color: var(--text-muted); white-space: nowrap;
+}
+
+/* ── Table container ── */
+.admin-table-wrap {
+  flex: 1; overflow-y: auto; overflow-x: auto; min-height: 0; padding: 16px 20px;
+}
+
+.admin-table {
+  width: 100%; border-collapse: collapse; font-size: .875rem;
+  background: #fff; border-radius: 12px; overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08);
+}
+
+.admin-table th {
+  background: linear-gradient(90deg, var(--sky), #1A6B9E);
+  color: #fff; text-align: left; padding: 11px 14px;
+  font-size: .78rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.admin-table td {
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.admin-table tr:last-child td { border-bottom: none; }
+.admin-table tr:hover td { background: #F8FAFC; }
+
+/* ── Role badge ── */
+.role-pill {
+  display: inline-block; padding: 2px 10px; border-radius: 999px;
+  font-size: .72rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+}
+.role-pill.admin           { background: var(--gold); color: #1A2F23; }
+.role-pill.assistant_user  { background: #DBEAFE; color: var(--sky); }
+.role-pill.viewer          { background: #DCFCE7; color: #16A34A; }
+.role-pill.sin-rol         { background: #F1F5F9; color: #94A3B8; }
+
+/* ── Actions ── */
+.admin-actions { display: flex; align-items: center; gap: 8px; }
+
+.role-select {
+  padding: 5px 8px; border: 1.5px solid var(--border); border-radius: 7px;
+  font-size: .82rem; outline: none; cursor: pointer; background: #fff;
+  min-width: 130px; transition: border-color .15s;
+}
+.role-select:focus { border-color: var(--sky); }
+
+.btn-apply {
+  padding: 5px 12px; background: var(--sky); color: #fff; border: none;
+  border-radius: 7px; font-size: .82rem; font-weight: 600; cursor: pointer;
+  transition: opacity .15s;
+}
+.btn-apply:hover:not(:disabled) { opacity: .85; }
+.btn-apply:disabled { opacity: .5; cursor: not-allowed; }
+
+.btn-delete {
+  padding: 5px 10px; background: #FEF2F2; color: #DC2626;
+  border: 1px solid #FECACA; border-radius: 7px; font-size: .82rem;
+  font-weight: 600; cursor: pointer; transition: background .15s;
+  white-space: nowrap;
+}
+.btn-delete:hover:not(:disabled) { background: #FEE2E2; }
+.btn-delete:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ── Feedback toast ── */
+.admin-toast {
+  position: fixed; bottom: 24px; right: 24px; z-index: 999;
+  padding: 12px 20px; border-radius: 10px; font-size: .875rem; font-weight: 600;
+  box-shadow: 0 4px 16px rgba(0,0,0,.2); animation: slideUp .25s ease;
+}
+.admin-toast.success { background: #DCFCE7; color: #166534; border: 1px solid #86EFAC; }
+.admin-toast.error   { background: #FEF2F2; color: #991B1B; border: 1px solid #FECACA; }
+@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+/* ── Loading / empty ── */
+.admin-loading {
+  display: flex; align-items: center; justify-content: center;
+  gap: 12px; padding: 40px; color: var(--text-muted); font-size: .9rem;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .admin-table-wrap { padding: 10px; }
+  .admin-toolbar { padding: 10px; }
+  .admin-table th, .admin-table td { padding: 8px 10px; }
+  .admin-actions { flex-wrap: wrap; }
+  .col-created { display: none; }
+  .col-last    { display: none; }
+}

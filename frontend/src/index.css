@@ -1,50 +1,55 @@
-*, *::before, *::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --primary:          #1d4ed8;
-  --primary-dark:     #1e40af;
-  --bg:               #f1f5f9;
+  /* ── Peru Tourism Palette ── */
+  --gold:        #E8B84B;   /* Inca gold  */
+  --gold-dark:   #C9963A;
+  --red:         #D91B2A;   /* Peru flag  */
+  --green:       #2D6A4F;   /* Andean forest */
+  --sky:         #1565A0;   /* Andean sky */
+  --sand:        #F5E6C8;   /* Coastal desert */
+  --cream:       #FEFAF2;
+  --stone:       #8B7355;   /* Inca walls */
+  --dark:        #1A2F23;   /* Deep forest */
+
+  /* ── UI aliases ── */
+  --primary:          var(--sky);
+  --primary-dark:     #0D4880;
+  --accent:           var(--gold);
+  --bg:               var(--cream);
   --surface:          #ffffff;
-  --sidebar-bg:       #1e293b;
-  --sidebar-text:     #cbd5e1;
-  --text:             #0f172a;
-  --text-muted:       #64748b;
-  --border:           #e2e8f0;
-  --bubble-user:      #1d4ed8;
-  --bubble-assistant: #f1f5f9;
-  --bubble-error-bg:  #fef2f2;
-  --bubble-error-txt: #dc2626;
-  --radius:           12px;
-  --shadow:           0 1px 3px rgba(0,0,0,.1), 0 1px 2px -1px rgba(0,0,0,.1);
+  --sidebar-bg:       var(--dark);
+  --sidebar-text:     #CBD5E1;
+  --text:             #0F172A;
+  --text-muted:       #64748B;
+  --border:           #E2E8F0;
+  --bubble-user:      var(--sky);
+  --bubble-assistant: #F1F5F9;
+  --error-bg:         #FEF2F2;
+  --error-txt:        #DC2626;
+
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 15px;
   color: var(--text);
 }
 
-body {
-  background: var(--bg);
-  height: 100vh;
-  overflow: hidden;
-}
+body { background: var(--bg); height: 100vh; overflow: hidden; }
 
-/* Global spinner */
+/* ── Spinner ── */
 .spinner {
-  display: inline-block;
-  width: 32px;
-  height: 32px;
-  border: 3px solid var(--border);
-  border-top-color: var(--primary);
-  border-radius: 50%;
-  animation: spin .8s linear infinite;
+  display: inline-block; width: 34px; height: 34px;
+  border: 3px solid var(--border); border-top-color: var(--gold);
+  border-radius: 50%; animation: spin .8s linear infinite;
 }
-
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Scrollbar */
+/* ── Scrollbar ── */
 ::-webkit-scrollbar       { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 99px; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 99px; }
+
+/* ── PDF print styles ── */
+@media print {
+  body { overflow: visible; height: auto; background: white; }
+  .no-print { display: none !important; }
+}

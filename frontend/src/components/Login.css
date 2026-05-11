@@ -1,135 +1,149 @@
+/* ── Root ── */
 .login-root {
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #1e293b 0%, #1d4ed8 100%);
+  background:
+    linear-gradient(180deg,
+      #1565A0 0%,
+      #1A6B9E 28%,
+      #2D6A4F 62%,
+      #1A2F23 100%);
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
 }
 
+/* Mountain silhouette layer */
+.login-root::before {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0; height: 35%;
+  background:
+    radial-gradient(ellipse 60% 80% at 20% 100%, #1A2F23 0%, transparent 70%),
+    radial-gradient(ellipse 50% 90% at 80% 100%, #1F3A28 0%, transparent 70%),
+    radial-gradient(ellipse 40% 70% at 50% 100%, #2D6A4F 0%, transparent 60%);
+  pointer-events: none;
+}
+
+/* Stars effect */
+.login-root::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 35%;
+  background-image:
+    radial-gradient(1px 1px at 20% 10%, rgba(255,255,255,.6) 0%, transparent 100%),
+    radial-gradient(1px 1px at 40% 5%,  rgba(255,255,255,.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 60% 15%, rgba(255,255,255,.5) 0%, transparent 100%),
+    radial-gradient(1px 1px at 80% 8%,  rgba(255,255,255,.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 15% 20%, rgba(255,255,255,.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 70% 3%,  rgba(255,255,255,.6) 0%, transparent 100%);
+  pointer-events: none;
+}
+
+/* ── Card ── */
 .login-card {
-  background: #fff;
+  position: relative; z-index: 1;
+  background: rgba(255,255,255,.97);
   border-radius: 20px;
-  padding: 40px 36px;
-  width: 100%;
-  max-width: 400px;
-  box-shadow: 0 20px 60px rgba(0,0,0,.3);
+  padding: 36px 32px 28px;
+  width: 100%; max-width: 400px;
+  box-shadow: 0 24px 64px rgba(0,0,0,.35), 0 0 0 1px rgba(232,184,75,.3);
 }
 
-.login-logo {
-  text-align: center;
-  margin-bottom: 14px;
-}
+/* ── Logo / Inti sun ── */
+.login-logo { text-align: center; margin-bottom: 12px; }
 
 .login-title {
-  font-size: 1.45rem;
-  font-weight: 700;
-  text-align: center;
-  color: #0f172a;
+  font-size: 1.5rem; font-weight: 800; text-align: center;
+  background: linear-gradient(135deg, #1565A0, #C9963A);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .login-subtitle {
-  text-align: center;
-  color: #64748b;
-  font-size: .875rem;
-  margin-bottom: 28px;
-  margin-top: 2px;
+  text-align: center; color: #64748B; font-size: .875rem;
+  margin-top: 3px; margin-bottom: 24px;
 }
 
-/* Google button */
-.btn-google {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 10px 16px;
-  border: 1.5px solid #e2e8f0;
-  border-radius: 8px;
-  background: #fff;
-  font-size: .95rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background .15s;
+.login-tagline {
+  display: flex; align-items: center; justify-content: center;
+  gap: 6px; font-size: .78rem; color: #94A3B8; margin-bottom: 20px;
 }
-.btn-google:hover:not(:disabled) { background: #f8fafc; }
+.login-tagline span { color: var(--gold-dark, #C9963A); font-weight: 600; }
+
+/* ── Google button ── */
+.btn-google {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 11px 16px; border: 1.5px solid #E2E8F0; border-radius: 10px;
+  background: #fff; font-size: .95rem; font-weight: 500; cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.btn-google:hover:not(:disabled) { background: #F8FAFC; border-color: #CBD5E1; }
 .btn-google:disabled { opacity: .6; cursor: not-allowed; }
 
-/* Divider */
+/* ── Divider ── */
 .divider {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 18px 0;
-  color: #94a3b8;
-  font-size: .82rem;
+  display: flex; align-items: center; gap: 10px;
+  margin: 18px 0; color: #94A3B8; font-size: .8rem;
 }
-.divider::before,
-.divider::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: #e2e8f0;
+.divider::before, .divider::after {
+  content: ''; flex: 1; height: 1px; background: #E2E8F0;
 }
 
-/* Form fields */
+/* ── Form fields ── */
 .field-label {
-  display: block;
-  font-size: .82rem;
-  font-weight: 600;
-  color: #374151;
-  margin-top: 14px;
-  margin-bottom: 4px;
+  display: block; font-size: .82rem; font-weight: 600;
+  color: #374151; margin-top: 14px; margin-bottom: 5px;
 }
-
 .field-input {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1.5px solid #e2e8f0;
-  border-radius: 8px;
-  font-size: .95rem;
-  outline: none;
-  transition: border-color .15s;
+  width: 100%; padding: 10px 13px; border: 1.5px solid #E2E8F0;
+  border-radius: 9px; font-size: .95rem; outline: none; transition: border-color .15s;
+  background: #FAFAFA;
 }
-.field-input:focus { border-color: #1d4ed8; }
+.field-input:focus { border-color: #1565A0; background: #fff; }
 
-/* Error */
+/* ── Error ── */
 .login-error {
-  color: #dc2626;
-  font-size: .83rem;
-  margin-top: 10px;
-  background: #fef2f2;
-  border: 1px solid #fecaca;
-  border-radius: 6px;
-  padding: 8px 10px;
+  color: #DC2626; font-size: .82rem; margin-top: 10px;
+  background: #FEF2F2; border: 1px solid #FECACA;
+  border-radius: 8px; padding: 8px 12px;
 }
 
-/* Primary button */
+/* ── Primary button ── */
 .btn-primary {
-  width: 100%;
-  padding: 11px;
-  margin-top: 18px;
-  background: #1d4ed8;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background .15s;
+  width: 100%; padding: 12px; margin-top: 18px;
+  background: linear-gradient(135deg, #1565A0, #1A6B9E);
+  color: #fff; border: none; border-radius: 10px;
+  font-size: 1rem; font-weight: 700; cursor: pointer; letter-spacing: .02em;
+  transition: opacity .15s, transform .1s;
+  box-shadow: 0 4px 14px rgba(21,101,160,.35);
 }
-.btn-primary:hover:not(:disabled) { background: #1e40af; }
+.btn-primary:hover:not(:disabled) { opacity: .9; transform: translateY(-1px); }
+.btn-primary:active { transform: translateY(0); }
 .btn-primary:disabled { opacity: .6; cursor: not-allowed; }
 
-/* Toggle link */
+/* ── Toggle link ── */
 .link-toggle {
-  display: block;
-  width: 100%;
-  margin-top: 14px;
-  text-align: center;
-  background: none;
-  border: none;
-  color: #1d4ed8;
-  font-size: .875rem;
-  cursor: pointer;
-  text-decoration: underline;
+  display: block; width: 100%; margin-top: 14px; text-align: center;
+  background: none; border: none; color: #1565A0;
+  font-size: .875rem; cursor: pointer; text-decoration: underline;
+}
+
+/* ── Peru badges ── */
+.peru-icons {
+  display: flex; justify-content: center; gap: 16px; margin-top: 22px;
+  padding-top: 16px; border-top: 1px solid #F1F5F9;
+}
+.peru-icon-item {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  font-size: .65rem; color: #94A3B8; font-weight: 500; letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+/* ── Responsive ── */
+@media (max-width: 480px) {
+  .login-card { padding: 28px 20px 22px; border-radius: 16px; }
+  .login-title { font-size: 1.3rem; }
 }

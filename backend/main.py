@@ -29,7 +29,10 @@ from pydantic import BaseModel, Field
 
 import agent as agent_module
 import firestore_service as fs
-from auth import CurrentUser, get_current_user, require_role
+from auth import (
+    CurrentUser, get_current_user, require_role,
+    list_firebase_users, set_user_role, delete_firebase_user,
+)
 
 # ---------------------------------------------------------------------------
 # App
@@ -92,6 +95,15 @@ class ProfileUpdateRequest(BaseModel):
 class AdminSessionsResponse(BaseModel):
     sessions: list[dict[str, Any]]
     total_sessions: int
+
+
+class AdminUsersResponse(BaseModel):
+    users: list[dict[str, Any]]
+    total_users: int
+
+
+class UserRoleUpdateRequest(BaseModel):
+    role: str | None = Field(default=None, description="Rol a asignar. None para quitar el rol.")
 
 
 class HealthResponse(BaseModel):
@@ -280,6 +292,68 @@ def admin_sessions(user: CurrentUser) -> AdminSessionsResponse:
         )
 
     return AdminSessionsResponse(sessions=sessions, total_sessions=len(sessions))
+
+
+@app.get(
+    "/admin/users",
+    response_model=AdminUsersResponse,
+    tags=["admin"],
+    dependencies=[Depends(require_role(["admin"]))],
+)
+def admin_list_users() -> AdminUsersResponse:
+    """Return all Firebase Auth users with their roles. Requires role: ``admin``."""
+    try:
+        users = list_firebase_users()
+    except Exception as exc:
+        print(f"[main] Firebase list_users error: {exc}")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail="No se pudo obtener la lista de usuarios.")
+    return AdminUsersResponse(users=users, total_users=len(users))
+
+
+@app.put(
+    "/admin/users/{uid}/role",
+    response_model=DeleteResponse,
+    tags=["admin"],
+    dependencies=[Depends(require_role(["admin"]))],
+)
+def admin_update_role(uid: str, body: UserRoleUpdateRequest, user: CurrentUser) -> DeleteResponse:
+    """Assign or clear a role for a Firebase user. Requires role: ``admin``."""
+    if uid == user["uid"] and not body.role:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="No puedes quitarte el rol a ti mismo.")
+    valid = {"assistant_user", "viewer", "admin", None}
+    if body.role not in valid:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail=f"Rol inválido: {body.role!r}. Válidos: assistant_user, viewer, admin.")
+    try:
+        set_user_role(uid, body.role)
+    except Exception as exc:
+        print(f"[main] set_user_role error: {exc}")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail="No se pudo actualizar el rol.")
+    return DeleteResponse(message="Rol actualizado correctamente.")
+
+
+@app.delete(
+    "/admin/users/{uid}",
+    response_model=DeleteResponse,
+    tags=["admin"],
+    dependencies=[Depends(require_role(["admin"]))],
+)
+def admin_delete_user(uid: str, user: CurrentUser) -> DeleteResponse:
+    """Permanently delete a Firebase Auth user. Requires role: ``admin``."""
+    if uid == user["uid"]:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="No puedes eliminar tu propia cuenta.")
+    try:
+        delete_firebase_user(uid)
+        fs.clear_session(uid)
+    except Exception as exc:
+        print(f"[main] delete_user error: {exc}")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail="No se pudo eliminar el usuario.")
+    return DeleteResponse(message="Usuario eliminado correctamente.")
 
 
 # ---------------------------------------------------------------------------

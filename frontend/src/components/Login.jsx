@@ -15,16 +15,56 @@ const ERRORS = {
   'auth/invalid-credential':     'Credenciales incorrectas. Verifica tu correo y contraseña.',
   'auth/email-already-in-use':   'Ya existe una cuenta con ese correo.',
   'auth/weak-password':          'La contraseña debe tener al menos 6 caracteres.',
-  'auth/too-many-requests':      'Demasiados intentos. Intenta más tarde.',
-  'auth/network-request-failed': 'Error de red. Comprueba tu conexión.',
+  'auth/too-many-requests':      'Demasiados intentos. Espera unos minutos.',
+  'auth/network-request-failed': 'Error de red. Verifica tu conexión.',
   'auth/unauthorized-domain':    'Dominio no autorizado en Firebase.',
-  'auth/popup-closed-by-user':   null, // silent — user closed the popup intentionally
+  'auth/popup-closed-by-user':   null,
 }
 
 function friendlyError(code) {
   const msg = ERRORS[code]
-  if (msg === null) return null           // intentionally silent
+  if (msg === null) return null
   return msg ?? `Error inesperado (${code}).`
+}
+
+/* ── Inca Sun (Inti) SVG ── */
+function IntiSun({ size = 56 }) {
+  const rays = Array.from({ length: 16 }, (_, i) => i)
+  return (
+    <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
+      <defs>
+        <radialGradient id="sunGrad" cx="50%" cy="50%" r="50%">
+          <stop offset="0%"   stopColor="#FFD700"/>
+          <stop offset="100%" stopColor="#E8B84B"/>
+        </radialGradient>
+      </defs>
+      {/* Rays */}
+      {rays.map((i) => {
+        const angle = (i * 360) / 16
+        const rad   = (angle * Math.PI) / 180
+        const isWavy = i % 2 === 1
+        const x1 = 50 + Math.cos(rad) * 24
+        const y1 = 50 + Math.sin(rad) * 24
+        const x2 = 50 + Math.cos(rad) * 46
+        const y2 = 50 + Math.sin(rad) * 46
+        return isWavy ? (
+          <path key={i}
+            d={`M ${x1} ${y1} Q ${50 + Math.cos(rad + 0.25) * 35} ${50 + Math.sin(rad + 0.25) * 35} ${x2} ${y2}`}
+            stroke="#E8B84B" strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+        ) : (
+          <line key={i} x1={x1} y1={y1} x2={x2} y2={y2}
+            stroke="#E8B84B" strokeWidth="3" strokeLinecap="round"/>
+        )
+      })}
+      {/* Circle */}
+      <circle cx="50" cy="50" r="20" fill="url(#sunGrad)"/>
+      {/* Face */}
+      <circle cx="44" cy="47" r="2.5" fill="#8B5E00"/>
+      <circle cx="56" cy="47" r="2.5" fill="#8B5E00"/>
+      <path d="M 44 55 Q 50 60 56 55" stroke="#8B5E00" strokeWidth="2"
+            strokeLinecap="round" fill="none"/>
+    </svg>
+  )
 }
 
 export default function Login() {
@@ -32,7 +72,7 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error,    setError]    = useState('')
   const [loading,  setLoading]  = useState(false)
-  const [mode,     setMode]     = useState('login') // 'login' | 'register'
+  const [mode,     setMode]     = useState('login')
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -44,7 +84,6 @@ export default function Login() {
       } else {
         await signInWithEmailAndPassword(auth, email, password)
       }
-      // AuthContext will pick up the new user via onAuthStateChanged → App re-renders
     } catch (err) {
       const msg = friendlyError(err.code)
       if (msg) setError(msg)
@@ -70,21 +109,20 @@ export default function Login() {
     <div className="login-root">
       <div className="login-card">
 
-        {/* Logo */}
         <div className="login-logo">
-          <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
-            <circle cx="26" cy="26" r="26" fill="#1d4ed8"/>
-            {/* Plane silhouette */}
-            <path d="M14 30l5-9 4 5 5-6 10 10" stroke="#fff" strokeWidth="2.5"
-                  strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M22 36h8" stroke="#fff" strokeWidth="2" strokeLinecap="round"/>
-          </svg>
+          <IntiSun size={60} />
         </div>
 
         <h1 className="login-title">Transporte Perú</h1>
-        <p className="login-subtitle">Asistente de vuelos y buses</p>
+        <p className="login-subtitle">Asistente inteligente de viajes</p>
 
-        {/* Google */}
+        <div className="login-tagline">
+          <span>✈ Vuelos</span>&nbsp;·&nbsp;
+          <span>🚌 Buses</span>&nbsp;·&nbsp;
+          <span>🚂 Trenes</span>&nbsp;·&nbsp;
+          <span>🌤 Clima</span>
+        </div>
+
         <button className="btn-google" onClick={handleGoogle} disabled={loading}>
           <svg width="18" height="18" viewBox="0 0 18 18">
             <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>
@@ -98,30 +136,16 @@ export default function Login() {
         <div className="divider"><span>o</span></div>
 
         <form onSubmit={handleSubmit}>
-          <label className="field-label" htmlFor="login-email">Correo electrónico</label>
-          <input
-            id="login-email"
-            className="field-input"
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            placeholder="tu@correo.com"
-            required
-            autoComplete="email"
-          />
+          <label className="field-label" htmlFor="l-email">Correo electrónico</label>
+          <input id="l-email" className="field-input" type="email" value={email}
+            onChange={e => setEmail(e.target.value)} placeholder="tu@correo.com"
+            required autoComplete="email"/>
 
-          <label className="field-label" htmlFor="login-pass">Contraseña</label>
-          <input
-            id="login-pass"
-            className="field-input"
-            type="password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            placeholder="••••••••"
-            required
-            minLength={6}
-            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-          />
+          <label className="field-label" htmlFor="l-pass">Contraseña</label>
+          <input id="l-pass" className="field-input" type="password" value={password}
+            onChange={e => setPassword(e.target.value)} placeholder="••••••••"
+            required minLength={6}
+            autoComplete={mode === 'login' ? 'current-password' : 'new-password'}/>
 
           {error && <p className="login-error">{error}</p>}
 
@@ -130,14 +154,20 @@ export default function Login() {
           </button>
         </form>
 
-        <button
-          className="link-toggle"
-          onClick={() => { setMode(m => m === 'login' ? 'register' : 'login'); setError('') }}
-        >
-          {mode === 'login'
-            ? '¿No tienes cuenta? Regístrate'
-            : '¿Ya tienes cuenta? Ingresar'}
+        <button className="link-toggle"
+          onClick={() => { setMode(m => m === 'login' ? 'register' : 'login'); setError('') }}>
+          {mode === 'login' ? '¿No tienes cuenta? Regístrate' : '¿Ya tienes cuenta? Ingresar'}
         </button>
+
+        {/* Peru destination icons */}
+        <div className="peru-icons">
+          {[['🗿','Machu Picchu'],['🌊','Paracas'],['🌿','Amazonía'],['🏔','Andes'],['🏙','Lima']].map(([icon, label]) => (
+            <div key={label} className="peru-icon-item">
+              <span style={{ fontSize: '1.3rem' }}>{icon}</span>
+              {label}
+            </div>
+          ))}
+        </div>
 
       </div>
     </div>
