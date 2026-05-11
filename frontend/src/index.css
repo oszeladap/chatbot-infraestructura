@@ -33,7 +33,7 @@
   color: var(--text);
 }
 
-body { background: var(--bg); height: 100vh; overflow: hidden; }
+body { background: var(--bg); height: 100vh; height: 100svh; overflow: hidden; }
 
 /* ── Spinner ── */
 .spinner {

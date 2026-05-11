@@ -22,6 +22,7 @@ function generateChatId() {
 // ── PDF helpers ───────────────────────────────────────────────────────────────
 function cleanTxt(s) {
   const stripped = (s ?? '')
+    .replace(/^#{1,6}\s*/g, '')           // strip markdown heading markers (#, ##, …)
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\*([^*]+)\*/g, '$1')
     .replace(/`([^`]+)`/g, '$1')
@@ -86,7 +87,11 @@ function parseBlocks(text) {
 
     flushTable()
 
-    const hm = line.match(/^(#{1,3})\s+(.+)/)
+    // Skip horizontal rules (--- / *** / ___)
+    if (/^[-*_]{3,}$/.test(line)) continue
+
+    // Match headings with or without space after # markers (e.g. ##Title or ## Title)
+    const hm = line.match(/^(#{1,6})\s*(.+)/)
     if (hm) { blocks.push({ type: 'heading', level: hm[1].length, text: cleanTxt(hm[2]) }); continue }
 
     const bm = raw.match(/^(\s*)[-*+]\s+(.+)/)
@@ -125,7 +130,7 @@ function renderBlocks(doc, blocks, x, y, w, secHc, secRc, pageH, M) {
       const bH = lines.length * LH + 4
       if (y + bH > pageH - M) { doc.addPage(); y = M }
       doc.setTextColor(30, 40, 70)
-      doc.text('•', xb, y + LH)
+      doc.text('-', xb, y + LH)
       doc.text(lines, xb + 8, y + LH)
       y += bH
     } else if (b.type === 'table') {
@@ -274,8 +279,17 @@ async function exportPDF(messages, userEmail) {
     }
   }
 
+  // Each Q/A pair appears in at most one section (first match wins)
+  const usedPairIdxs = new Set()
+
   for (const sec of SECTIONS) {
-    const hits = pairs.filter(p => sec.rx.test(p.q + ' ' + p.a))
+    const hits = []
+    pairs.forEach((p, idx) => {
+      if (!usedPairIdxs.has(idx) && sec.rx.test(p.q + ' ' + p.a)) {
+        hits.push(p)
+        usedPairIdxs.add(idx)
+      }
+    })
 
     // Section header + subtitle must not be orphaned — keep together with first content
     const secNeeded = 43 + (hits.length > 0 ? 60 : 22)
