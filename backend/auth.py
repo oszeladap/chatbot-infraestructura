@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import logging
 import os
-from functools import lru_cache
 from typing import Annotated, Any
 
 import firebase_admin
@@ -9,18 +9,23 @@ from fastapi import Depends, Header, HTTPException, status
 from firebase_admin import auth, credentials
 from pydantic import BaseModel
 
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Firebase initialisation (lazy, singleton)
+# Firebase initialisation — safe for module reloads and concurrent calls
 # ---------------------------------------------------------------------------
 
-@lru_cache(maxsize=1)
 def _init_firebase() -> firebase_admin.App:
-    cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-    if not cred_path:
-        raise RuntimeError("GOOGLE_APPLICATION_CREDENTIALS environment variable is not set")
-    cred = credentials.Certificate(cred_path)
-    return firebase_admin.initialize_app(cred)
+    """Return the default Firebase app, initialising it if needed."""
+    try:
+        return firebase_admin.get_app()
+    except ValueError:
+        # App not yet initialised in this process
+        cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        if not cred_path:
+            raise RuntimeError("GOOGLE_APPLICATION_CREDENTIALS environment variable is not set")
+        cred = credentials.Certificate(cred_path)
+        return firebase_admin.initialize_app(cred)
 
 
 # ---------------------------------------------------------------------------
@@ -45,19 +50,19 @@ def verify_firebase_token(token: str) -> dict[str, Any]:
         decoded = auth.verify_id_token(token, check_revoked=False)
     except auth.ExpiredIdTokenError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail="Token expirado. Recarga la página.")
+                            detail="Sesión expirada. Recarga la página.")
     except auth.RevokedIdTokenError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
                             detail="Sesión revocada. Inicia sesión nuevamente.")
     except auth.InvalidIdTokenError as exc:
-        print(f"[auth] InvalidIdTokenError: {exc}")
+        logger.error("[auth] InvalidIdTokenError: %s | token_prefix=%s", exc, token[:30])
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
-                            detail="Token inválido. Recarga la página.")
+                            detail="Sesión inválida. Cierra sesión e inicia de nuevo.")
     except Exception as exc:
-        # Log the real error so we can diagnose it in the server console
-        print(f"[auth] verify_id_token unexpected error ({type(exc).__name__}): {exc}")
+        logger.error("[auth] verify_id_token %s: %s | token_prefix=%s",
+                     type(exc).__name__, exc, token[:30])
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                            detail="Error al verificar la sesión. Intenta de nuevo.")
+                            detail="Error temporal al verificar la sesión. Intenta de nuevo.")
 
     return {
         "uid":   decoded["uid"],
