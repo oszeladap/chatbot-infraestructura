@@ -8,21 +8,134 @@ import MessageBubble from './MessageBubble'
 import AdminPanel from './AdminPanel'
 import './Chat.css'
 
-// ── Markdown stripper for PDF ─────────────────────────────────────────────────
-function stripMd(text) {
-  return (text ?? '')
-    .replace(/#{1,6}\s+/g, '')
+// ── PDF helpers ───────────────────────────────────────────────────────────────
+function cleanTxt(s) {
+  return (s ?? '')
+    .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
+    .replace(/[☀-➿]/g, '')
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\*([^*]+)\*/g, '$1')
     .replace(/`([^`]+)`/g, '$1')
-    .replace(/\[Fuente:\s*([^\]]+)\]/g, '(Fuente: $1)')
-    .replace(/\[[^\]]+\]\([^)]+\)/g, '')
-    .replace(/^\s*[-*+]\s/gm, '  * ')
-    .replace(/^\s*\d+\.\s/gm, '  ')
-    .replace(/\|[-:\s|]+\|[\r\n]?/g, '')
-    .replace(/\|/g, '  ')
-    .replace(/\n{3,}/g, '\n\n')
+    .replace(/\[Fuente:[^\]]+\]/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .trim()
+}
+
+function parseBlocks(text) {
+  const lines = (text ?? '').split('\n').map(l => l.replace(/\r$/, ''))
+  const blocks = []
+  let tableRows = null
+
+  const flushTable = () => {
+    if (tableRows) { blocks.push({ type: 'table', rows: tableRows }); tableRows = null }
+  }
+
+  for (const raw of lines) {
+    const line = raw.trim()
+
+    if (!line) { flushTable(); continue }
+
+    if (line.startsWith('|')) {
+      if (/^\|[-:\s|]+\|$/.test(line)) continue
+      const cells = line.split('|').slice(1, -1).map(c => cleanTxt(c.trim()))
+      if (!tableRows) tableRows = []
+      tableRows.push(cells)
+      continue
+    }
+
+    flushTable()
+
+    const hm = line.match(/^(#{1,3})\s+(.+)/)
+    if (hm) { blocks.push({ type: 'heading', level: hm[1].length, text: cleanTxt(hm[2]) }); continue }
+
+    const bm = raw.match(/^(\s*)[-*+]\s+(.+)/)
+    if (bm) { blocks.push({ type: 'bullet', indent: Math.floor(bm[1].length / 2), text: cleanTxt(bm[2]) }); continue }
+
+    const nm = raw.match(/^(\s*)\d+\.\s+(.+)/)
+    if (nm) { blocks.push({ type: 'bullet', indent: Math.floor(nm[1].length / 2), text: cleanTxt(nm[2]) }); continue }
+
+    blocks.push({ type: 'text', text: cleanTxt(line) })
+  }
+  flushTable()
+  return blocks
+}
+
+function renderBlocks(doc, blocks, x, y, w, secHc, secRc, pageH, M) {
+  const LH = 11.5
+
+  for (const b of blocks) {
+    if (b.type === 'heading') {
+      const sz = b.level === 1 ? 10 : b.level === 2 ? 9.5 : 9
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(sz)
+      const lines = doc.splitTextToSize(b.text, w - 10)
+      const bH = lines.length * (sz + 3) + 8
+      if (y + bH > pageH - M) { doc.addPage(); y = M }
+      doc.setFillColor(...secRc)
+      doc.rect(x, y, w, bH, 'F')
+      doc.setTextColor(secHc[0], secHc[1], secHc[2])
+      doc.text(lines, x + 5, y + sz + 2)
+      y += bH + 2
+    } else if (b.type === 'bullet') {
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8.5)
+      const xb = x + 8 + b.indent * 10
+      const lines = doc.splitTextToSize(b.text, w - 16 - b.indent * 10)
+      const bH = lines.length * LH + 4
+      if (y + bH > pageH - M) { doc.addPage(); y = M }
+      doc.setTextColor(30, 40, 70)
+      doc.text('•', xb, y + LH)
+      doc.text(lines, xb + 8, y + LH)
+      y += bH
+    } else if (b.type === 'table') {
+      if (!b.rows?.length) continue
+      const numCols = b.rows[0].length || 1
+      const colW = Math.floor(w / numCols)
+      for (let ri = 0; ri < b.rows.length; ri++) {
+        doc.setFontSize(8)
+        let maxLines = 1
+        for (const cell of b.rows[ri]) {
+          const cl = doc.splitTextToSize(String(cell ?? ''), colW - 10)
+          maxLines = Math.max(maxLines, cl.length)
+        }
+        const rowH = Math.max(maxLines * LH + 8, 20)
+        if (y + rowH > pageH - M) { doc.addPage(); y = M }
+        if (ri === 0) {
+          doc.setFillColor(...secHc)
+          doc.setTextColor(255, 255, 255)
+          doc.setFont('helvetica', 'bold')
+        } else {
+          doc.setFillColor(...(ri % 2 === 1 ? secRc : [252, 252, 255]))
+          doc.setTextColor(25, 35, 65)
+          doc.setFont('helvetica', 'normal')
+        }
+        doc.rect(x, y, w, rowH, 'F')
+        for (let ci = 0; ci < numCols; ci++) {
+          const ct = doc.splitTextToSize(String(b.rows[ri][ci] ?? ''), colW - 10)
+          doc.text(ct, x + ci * colW + 5, y + LH + 2)
+        }
+        doc.setDrawColor(200, 210, 230)
+        doc.setLineWidth(0.3)
+        doc.rect(x, y, w, rowH, 'S')
+        for (let ci = 1; ci < numCols; ci++) {
+          doc.line(x + ci * colW, y, x + ci * colW, y + rowH)
+        }
+        y += rowH
+      }
+      y += 5
+    } else {
+      if (!b.text) continue
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8.5)
+      const lines = doc.splitTextToSize(b.text, w - 8)
+      const bH = lines.length * LH + 3
+      if (y + bH > pageH - M) { doc.addPage(); y = M }
+      doc.setTextColor(30, 40, 70)
+      doc.text(lines, x + 4, y + LH)
+      y += bH
+    }
+  }
+  return y
 }
 
 // ── PDF export ────────────────────────────────────────────────────────────────
@@ -123,9 +236,10 @@ async function exportPDF(messages, userEmail) {
   for (const sec of SECTIONS) {
     const hits = pairs.filter(p => sec.rx.test(p.q + ' ' + p.a))
 
-    y = guard(y, 70)
+    // Section header + subtitle must not be orphaned — keep together with first content
+    const secNeeded = 43 + (hits.length > 0 ? 60 : 22)
+    if (y + secNeeded > pageH - M) { doc.addPage(); y = M }
 
-    // Cabecera de sección
     doc.setFillColor(...sec.hc)
     doc.rect(M, y, CW, 26, 'F')
     doc.setTextColor(255, 255, 255)
@@ -134,7 +248,6 @@ async function exportPDF(messages, userEmail) {
     doc.text(sec.title, M + 8, y + 17)
     y += 26
 
-    // Subtítulo
     doc.setFillColor(242, 244, 250)
     doc.rect(M, y, CW, 17, 'F')
     doc.setTextColor(80, 90, 120)
@@ -150,40 +263,35 @@ async function exportPDF(messages, userEmail) {
       doc.setFont('helvetica', 'italic')
       doc.setFontSize(8)
       doc.text('Sin informacion disponible sobre este tema en la conversacion actual.', M + 8, y + 14)
-      y += 22 + 10
+      y += 22 + 14
       continue
     }
 
     for (const pair of hits) {
-      const qLines = doc.splitTextToSize('> ' + pair.q, CW - 16)
-      const qH = Math.max(qLines.length * 12 + 10, 24)
-      y = guard(y, qH + 4)
-      doc.setFillColor(215, 220, 235)
+      const qClean = cleanTxt(pair.q)
+      const qLines = doc.splitTextToSize(qClean, CW - 18)
+      const qH = Math.max(qLines.length * 12 + 10, 26)
+
+      // Keep Q + at least 50pt of answer together on same page
+      if (y + qH + 50 > pageH - M) { doc.addPage(); y = M }
+
+      doc.setFillColor(210, 218, 238)
       doc.rect(M, y, CW, qH, 'F')
-      doc.setTextColor(20, 30, 70)
+      doc.setTextColor(15, 25, 65)
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(8.5)
-      doc.text(qLines, M + 8, y + 9)
+      doc.text(qLines, M + 8, y + 11)
       y += qH
 
-      const aClean = stripMd(pair.a)
-      const aLines = doc.splitTextToSize(aClean, CW - 16)
-      const aH = Math.max(aLines.length * 11.5 + 12, 28)
-      y = guard(y, aH + 4)
-      doc.setFillColor(...sec.rc)
-      doc.rect(M, y, CW, aH, 'F')
-      doc.setTextColor(15, 20, 50)
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(8.5)
-      doc.text(aLines, M + 8, y + 9)
-      y += aH
+      // Render answer with full markdown formatting
+      y = renderBlocks(doc, parseBlocks(pair.a), M + 4, y + 4, CW - 4, sec.hc, sec.rc, pageH, M)
 
       doc.setDrawColor(...sec.hc)
-      doc.setLineWidth(0.4)
-      doc.line(M, y, M + CW, y)
-      y += 6
+      doc.setLineWidth(0.3)
+      doc.line(M, y + 4, M + CW, y + 4)
+      y += 14
     }
-    y += 14
+    y += 18
   }
 
   // ── PIE DE PÁGINA ─────────────────────────────────────────────────────────
@@ -286,11 +394,12 @@ export default function Chat() {
 
   // ── New chat ──────────────────────────────────────────────────────────────
   const newChat = useCallback(() => {
+    fetchAllHistory()
     setMessages([])
     setActiveSessionIdx(null)
     setIsHistoryView(false)
     if (window.innerWidth <= 768) setSidebarOpen(false)
-  }, [])
+  }, [fetchAllHistory])
 
   // ── Send message ──────────────────────────────────────────────────────────
   const sendMessage = async (e) => {
