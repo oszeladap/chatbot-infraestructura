@@ -9,66 +9,190 @@ import AdminPanel from './AdminPanel'
 import './Chat.css'
 
 // ── PDF export ────────────────────────────────────────────────────────────────
-async function exportPDF(messages) {
+function stripMd(text) {
+  return (text ?? '')
+    .replace(/#{1,6}\s+/g, '')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\[Fuente:\s*([^\]]+)\]/g, '(Fuente: $1)')
+    .replace(/\[[^\]]+\]\([^)]+\)/g, '')
+    .replace(/^\s*[-*+]\s/gm, '  * ')
+    .replace(/^\s*\d+\.\s/gm, '  ')
+    .replace(/\|[-:\s|]+\|[\r\n]?/g, '')
+    .replace(/\|/g, '  ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+async function exportPDF(messages, userEmail) {
   const { jsPDF } = await import('jspdf')
-  const doc = new jsPDF({ unit: 'pt', format: 'a4' })
+  const doc  = new jsPDF({ unit: 'pt', format: 'a4' })
+  const pageW = doc.internal.pageSize.getWidth()   // 595
+  const pageH = doc.internal.pageSize.getHeight()  // 842
+  const M  = 36
+  const CW = pageW - M * 2
 
-  const pageW  = doc.internal.pageSize.getWidth()
-  const pageH  = doc.internal.pageSize.getHeight()
-  const margin = 48
-  const maxW   = pageW - margin * 2
-  let y        = margin
+  function guard(y, needed = 50) {
+    if (y + needed > pageH - 40) { doc.addPage(); return M }
+    return y
+  }
 
-  // Header band
-  doc.setFillColor(21, 101, 160)
-  doc.rect(0, 0, pageW, 64, 'F')
+  // ── PORTADA / CABECERA ────────────────────────────────────
+  doc.setFillColor(180, 10, 30)
+  doc.rect(0, 0, pageW, 78, 'F')
+  doc.setFillColor(232, 184, 75)
+  doc.rect(0, 78, pageW, 5, 'F')
+
   doc.setTextColor(255, 255, 255)
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(16)
-  doc.text('Asistente de Transporte · Perú', margin, 38)
+  doc.setFontSize(14)
+  doc.text('SISTEMA INTELIGENTE DE VIAJES DE PERU', M, 30)
+  doc.setFontSize(10)
+  doc.text('Recomendaciones Personalizadas de Viaje', M, 50)
   doc.setFont('helvetica', 'normal')
-  doc.setFontSize(9)
-  doc.text(`Exportado el ${new Date().toLocaleDateString('es-PE', { day:'2-digit', month:'long', year:'numeric' })}`, margin, 54)
-
-  y = 90
-
-  messages.forEach((msg, idx) => {
-    const isUser = msg.role === 'user'
-    const label  = isUser ? 'Usuario' : 'Asistente'
-    const color  = isUser ? [21, 101, 160] : [45, 106, 79]
-
-    // Label
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(8)
-    doc.setTextColor(...color)
-    doc.text(label.toUpperCase(), margin, y)
-    y += 14
-
-    // Bubble background
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(10)
-    doc.setTextColor(15, 23, 42)
-    const lines = doc.splitTextToSize(msg.content ?? '', maxW - 16)
-    const bh    = lines.length * 14 + 16
-
-    doc.setFillColor(...(isUser ? [219, 234, 254] : [241, 245, 249]))
-    doc.roundedRect(margin, y - 4, maxW, bh, 6, 6, 'F')
-    doc.text(lines, margin + 8, y + 10)
-    y += bh + 16
-
-    // Page break
-    if (y > pageH - margin && idx < messages.length - 1) {
-      doc.addPage()
-      y = margin
-    }
-  })
-
-  // Footer
   doc.setFontSize(8)
-  doc.setTextColor(148, 163, 184)
-  doc.text('Transporte Perú — Asistente inteligente de viajes', margin, pageH - 24)
+  doc.text('Documento generado automaticamente — uso exclusivo del usuario', M, 68)
 
-  doc.save('conversacion-transporte-peru.pdf')
+  // Barra de metadatos
+  doc.setFillColor(15, 23, 60)
+  doc.rect(0, 83, pageW, 26, 'F')
+  const now     = new Date()
+  const dateStr = now.toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' })
+  const timeStr = now.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
+  doc.setTextColor(180, 200, 240)
+  doc.setFontSize(8)
+  doc.text(`Fecha: ${dateStr}   Hora: ${timeStr}   Usuario: ${userEmail ?? 'N/A'}`, M, 100)
+
+  let y = 122
+
+  // ── SECCIONES ─────────────────────────────────────────────
+  const SECTIONS = [
+    {
+      title: 'COSTOS DE VIAJE EN VUELO Y BUS — COMPARATIVAS',
+      sub:   'Tarifas aereas y terrestres con comparativa de operadores',
+      hc: [21, 101, 160], rc: [235, 244, 255], ra: [215, 232, 255],
+      rx: /vuelo|avio|aerolin|latam|sky|avianca|jetsmart|bus\b|cruz del sur|oltursa|tepsa|aeropuerto|terminal|boleto|pasaje|tarifa/i,
+    },
+    {
+      title: 'COSTOS DE HOSPEDAJE — ALTERNATIVAS',
+      sub:   'Opciones de alojamiento en destino con rangos de precio',
+      hc: [45, 106, 79],  rc: [236, 253, 245], ra: [209, 250, 229],
+      rx: /hotel|hostal|hospedaje|alojamiento|habitaci|lodge|resort|airbnb|posada/i,
+    },
+    {
+      title: 'COSTOS DE ALIMENTACION Y TRANSPORTE LOCAL',
+      sub:   'Gastronomia tipica, restaurantes y movilidad en destino',
+      hc: [180, 83, 9],   rc: [255, 251, 235], ra: [254, 243, 199],
+      rx: /restaurante|comida|almuerzo|desayuno|cena|plato|men[uú]|gastronomia|taxi|mototaxi|uber|combi|transporte local/i,
+    },
+    {
+      title: 'LUGARES QUE VISITAR Y SUS COSTOS',
+      sub:   'Atracciones turisticas, tours y actividades recomendadas',
+      hc: [109, 40, 217], rc: [245, 243, 255], ra: [237, 233, 254],
+      rx: /museo|plaza|parque|iglesia|catedral|ruinas|machu picchu|tour\b|excursion|mirador|atraccion|visitar|lugar/i,
+    },
+    {
+      title: 'DATOS DEL CLIMA EN CIUDAD DESTINO',
+      sub:   'Condiciones meteorologicas, temperatura y recomendaciones',
+      hc: [14, 116, 144], rc: [236, 254, 255], ra: [207, 250, 254],
+      rx: /clima|temperatura|lluvia|sol\b|calor|fr[ií]o|humedad|viento|pron[oó]stico|meteorolog/i,
+    },
+  ]
+
+  // Pares pregunta/respuesta
+  const pairs = []
+  for (let i = 0; i < messages.length; i++) {
+    if (messages[i].role === 'user' && !messages[i].isError) {
+      const next = messages[i + 1]
+      if (next?.role === 'assistant' && !next.isError) {
+        pairs.push({ q: messages[i].content ?? '', a: next.content ?? '' })
+      }
+    }
+  }
+
+  for (const sec of SECTIONS) {
+    const hits = pairs.filter(p => sec.rx.test(p.q + ' ' + p.a))
+
+    // Cabecera de sección
+    y = guard(y, 70)
+    doc.setFillColor(...sec.hc)
+    doc.rect(M, y, CW, 26, 'F')
+    doc.setTextColor(255, 255, 255)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9.5)
+    doc.text(sec.title, M + 8, y + 17)
+    y += 26
+
+    // Subtítulo
+    doc.setFillColor(242, 244, 250)
+    doc.rect(M, y, CW, 17, 'F')
+    doc.setTextColor(80, 90, 120)
+    doc.setFont('helvetica', 'italic')
+    doc.setFontSize(7.5)
+    doc.text(sec.sub, M + 8, y + 11)
+    y += 17
+
+    if (hits.length === 0) {
+      doc.setFillColor(250, 250, 253)
+      doc.rect(M, y, CW, 22, 'F')
+      doc.setTextColor(160, 160, 180)
+      doc.setFont('helvetica', 'italic')
+      doc.setFontSize(8)
+      doc.text('Sin informacion disponible sobre este tema en la conversacion actual.', M + 8, y + 14)
+      y += 22 + 10
+      continue
+    }
+
+    for (const pair of hits) {
+      // Pregunta
+      const qLines = doc.splitTextToSize('> ' + pair.q, CW - 16)
+      const qH = Math.max(qLines.length * 12 + 10, 24)
+      y = guard(y, qH + 4)
+      doc.setFillColor(215, 220, 235)
+      doc.rect(M, y, CW, qH, 'F')
+      doc.setTextColor(20, 30, 70)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(8.5)
+      doc.text(qLines, M + 8, y + 9)
+      y += qH
+
+      // Respuesta
+      const aClean = stripMd(pair.a)
+      const aLines = doc.splitTextToSize(aClean, CW - 16)
+      const aH = Math.max(aLines.length * 11.5 + 12, 28)
+      y = guard(y, aH + 4)
+      doc.setFillColor(...sec.rc)
+      doc.rect(M, y, CW, aH, 'F')
+      doc.setTextColor(15, 20, 50)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8.5)
+      doc.text(aLines, M + 8, y + 9)
+      y += aH
+
+      // Divisor de sección
+      doc.setDrawColor(...sec.hc)
+      doc.setLineWidth(0.4)
+      doc.line(M, y, M + CW, y)
+      y += 6
+    }
+    y += 14
+  }
+
+  // ── PIE DE PÁGINA en todas las páginas ───────────────────
+  const total = doc.internal.getNumberOfPages()
+  for (let p = 1; p <= total; p++) {
+    doc.setPage(p)
+    doc.setFillColor(21, 101, 160)
+    doc.rect(0, pageH - 22, pageW, 22, 'F')
+    doc.setTextColor(200, 220, 255)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(6.5)
+    doc.text('Sistema Inteligente de Viajes de Peru  |  Documento generado automaticamente', M, pageH - 7)
+    doc.text(`Pag. ${p} / ${total}`, pageW - M - 28, pageH - 7)
+  }
+
+  doc.save(`recomendaciones-viaje-peru-${now.toISOString().slice(0, 10)}.pdf`)
 }
 
 // ── IntiSun logo ──────────────────────────────────────────────────────────────
@@ -243,7 +367,7 @@ export default function Chat() {
 
             {/* PDF export — only in chat tab */}
             {activeTab === 'chat' && messages.length > 0 && (
-              <button className="btn-header" onClick={() => exportPDF(messages)} title="Exportar conversación a PDF">
+              <button className="btn-header" onClick={() => exportPDF(messages, email)} title="Exportar conversación a PDF">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                   <polyline points="14 2 14 8 20 8"/>

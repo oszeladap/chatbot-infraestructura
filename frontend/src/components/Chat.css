@@ -189,13 +189,24 @@
 ══════════════════════════════════════════════ */
 .bubble-row {
   display: flex; flex-direction: column;
-  max-width: 78%;
+  max-width: 80%;
 }
 .bubble-row.user      { align-self: flex-end;  align-items: flex-end; }
 .bubble-row.assistant { align-self: flex-start; align-items: flex-start; }
 
+/* Section chip */
+.bubble-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: .68rem; font-weight: 700; letter-spacing: .05em;
+  text-transform: uppercase; margin-bottom: 3px;
+  border: 1px solid; border-radius: 999px;
+  padding: 2px 9px; background: #fff;
+  user-select: none;
+}
+
 .bubble {
-  padding: 10px 14px; border-radius: 14px; word-break: break-word;
+  padding: 11px 15px; border-radius: 16px; word-break: break-word;
+  border: 1.5px solid transparent;
 }
 .bubble-row.user .bubble {
   background: linear-gradient(135deg, var(--sky), #1A6B9E);
@@ -203,10 +214,16 @@
 }
 .bubble-row.assistant .bubble {
   background: var(--bubble-assistant); color: var(--text);
-  border: 1px solid var(--border); border-bottom-left-radius: 4px;
+  border-color: var(--border); border-bottom-left-radius: 4px;
 }
 .bubble.bubble-error { background: var(--error-bg); color: var(--error-txt); border-color: #FECACA; }
 
+/* User message plain text */
+.bubble-user-text {
+  font-size: .9rem; line-height: 1.6; margin: 0; color: #fff;
+}
+
+/* Legacy — kept for compatibility */
 .bubble-text {
   font-family: inherit; font-size: .875rem; line-height: 1.65;
   white-space: pre-wrap; margin: 0;
@@ -220,6 +237,76 @@
 .badge-search {
   background: rgba(232,184,75,.15); color: var(--gold-dark, #C9963A);
   border-radius: 4px; padding: 1px 7px; font-size: .68rem; font-weight: 700;
+}
+.badge-error {
+  background: rgba(220,38,38,.12); color: #DC2626;
+  border-radius: 4px; padding: 1px 7px; font-size: .68rem; font-weight: 700;
+}
+
+/* ══════════════════════════════════════════════
+   MARKDOWN CONTENT
+══════════════════════════════════════════════ */
+.bubble-md {
+  font-size: .9rem; line-height: 1.72; color: var(--text);
+}
+.md-h1 {
+  font-size: 1.05rem; font-weight: 800; color: var(--sky);
+  margin: 12px 0 5px; padding-bottom: 4px;
+  border-bottom: 2px solid rgba(21,101,160,.2);
+}
+.md-h2 {
+  font-size: .95rem; font-weight: 700; color: var(--dark);
+  margin: 10px 0 4px;
+}
+.md-h3 {
+  font-size: .88rem; font-weight: 600; color: #475569;
+  margin: 7px 0 3px;
+}
+.md-p  { margin: 5px 0; }
+.md-hr { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
+.md-ul, .md-ol { margin: 5px 0 5px 20px; padding: 0; }
+.md-ul li, .md-ol li { margin: 3px 0; }
+.md-code {
+  background: rgba(15,23,42,.08); border-radius: 4px;
+  padding: 1px 6px; font-family: 'Courier New', monospace;
+  font-size: .82em; color: #1E293B;
+}
+.md-link {
+  color: var(--sky); text-decoration: none; font-size: .84em;
+}
+.md-link:hover { text-decoration: underline; }
+.md-source {
+  color: var(--sky); text-decoration: none; font-size: .78em;
+  background: rgba(21,101,160,.09); border-radius: 4px;
+  padding: 1px 6px; display: inline-block; margin: 2px 0;
+  word-break: break-all;
+}
+.md-source:hover { text-decoration: underline; }
+.md-quote {
+  border-left: 3px solid var(--gold); padding: 4px 0 4px 12px;
+  color: #64748B; font-style: italic; margin: 6px 0;
+}
+
+/* ── Markdown tables ── */
+.md-table-wrap {
+  overflow-x: auto; margin: 10px 0;
+  border-radius: 8px; border: 1px solid var(--border);
+  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+.md-table {
+  width: 100%; border-collapse: collapse; font-size: .83rem;
+}
+.md-table thead tr { background: var(--sky); color: #fff; }
+.md-table th {
+  padding: 8px 12px; text-align: left;
+  font-weight: 700; white-space: nowrap;
+}
+.md-table tbody tr:nth-child(odd)  { background: #F8FAFC; }
+.md-table tbody tr:nth-child(even) { background: #fff; }
+.md-table tbody tr:hover           { background: rgba(21,101,160,.07); transition: background .12s; }
+.md-table td {
+  padding: 7px 12px; border-top: 1px solid var(--border);
+  vertical-align: top;
 }
 
 /* ══════════════════════════════════════════════
