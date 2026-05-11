@@ -1,0 +1,135 @@
+.login-root {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1e293b 0%, #1d4ed8 100%);
+}
+
+.login-card {
+  background: #fff;
+  border-radius: 20px;
+  padding: 40px 36px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.3);
+}
+
+.login-logo {
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+.login-title {
+  font-size: 1.45rem;
+  font-weight: 700;
+  text-align: center;
+  color: #0f172a;
+}
+
+.login-subtitle {
+  text-align: center;
+  color: #64748b;
+  font-size: .875rem;
+  margin-bottom: 28px;
+  margin-top: 2px;
+}
+
+/* Google button */
+.btn-google {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  font-size: .95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .15s;
+}
+.btn-google:hover:not(:disabled) { background: #f8fafc; }
+.btn-google:disabled { opacity: .6; cursor: not-allowed; }
+
+/* Divider */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0;
+  color: #94a3b8;
+  font-size: .82rem;
+}
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #e2e8f0;
+}
+
+/* Form fields */
+.field-label {
+  display: block;
+  font-size: .82rem;
+  font-weight: 600;
+  color: #374151;
+  margin-top: 14px;
+  margin-bottom: 4px;
+}
+
+.field-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: .95rem;
+  outline: none;
+  transition: border-color .15s;
+}
+.field-input:focus { border-color: #1d4ed8; }
+
+/* Error */
+.login-error {
+  color: #dc2626;
+  font-size: .83rem;
+  margin-top: 10px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+/* Primary button */
+.btn-primary {
+  width: 100%;
+  padding: 11px;
+  margin-top: 18px;
+  background: #1d4ed8;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+}
+.btn-primary:hover:not(:disabled) { background: #1e40af; }
+.btn-primary:disabled { opacity: .6; cursor: not-allowed; }
+
+/* Toggle link */
+.link-toggle {
+  display: block;
+  width: 100%;
+  margin-top: 14px;
+  text-align: center;
+  background: none;
+  border: none;
+  color: #1d4ed8;
+  font-size: .875rem;
+  cursor: pointer;
+  text-decoration: underline;
+}

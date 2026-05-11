@@ -22,16 +22,16 @@ from auth import CurrentUser, get_current_user, require_role
 # ---------------------------------------------------------------------------
 
 app = FastAPI(
-    title="Chatbot Infraestructura API",
-    description="API REST para el asistente de infraestructura cloud.",
-    version="1.0.0",
+    title="Chatbot Transporte Perú API",
+    description="API REST para el asistente de transporte aéreo y terrestre en Perú.",
+    version="2.0.0",
 )
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=False,   # Bearer token, no cookies — "*" requiere False
-    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -58,6 +58,21 @@ class HistoryResponse(BaseModel):
 
 class DeleteResponse(BaseModel):
     message: str
+
+
+class ProfileResponse(BaseModel):
+    cliente_id: str
+    nombre: str
+    email: str
+    preferencias: list[str]
+    notas: str
+    fecha_ultimo_ingreso: str | None
+
+
+class ProfileUpdateRequest(BaseModel):
+    nombre: str | None = Field(default=None, max_length=200)
+    preferencias: list[str] | None = None
+    notas: str | None = Field(default=None, max_length=2000)
 
 
 class AdminSessionsResponse(BaseModel):
@@ -100,10 +115,13 @@ def chat(
     uid = user["uid"]
     session_id = body.session_id or str(uuid.uuid4())
 
-    # 1 — retrieve prior history for this user
+    # Update last login timestamp
+    fs.touch_last_login(uid=uid, email=user.get("email", ""))
+
+    # Retrieve prior history
     history = fs.get_session_history(uid)
 
-    # 2 — run the LangChain agent
+    # Run the agent
     result = agent_module.run_agent(message=body.message, history=history)
 
     reply: str = result["response"]
@@ -116,7 +134,6 @@ def chat(
             detail="El agente no pudo procesar la consulta. Intenta de nuevo.",
         )
 
-    # 3 — persist user message and assistant reply
     try:
         fs.save_message(uid=uid, role="user", content=body.message, tokens=0)
         fs.save_message(uid=uid, role="assistant", content=reply, tokens=tokens)
@@ -149,8 +166,6 @@ def get_history(
 
     - ``assistant_user``: always receives their own history (``uid`` param ignored).
     - ``viewer`` / ``admin``: may pass a ``uid`` query param to inspect any session.
-
-    Requires role: ``assistant_user`` or ``viewer``.
     """
     role = user.get("role")
     target_uid: str
@@ -184,7 +199,7 @@ def get_history(
     dependencies=[Depends(require_role(["assistant_user"]))],
 )
 def delete_history(user: CurrentUser) -> DeleteResponse:
-    """Delete the entire session history for the authenticated user.
+    """Clear message history while preserving the user profile.
 
     Requires role: ``assistant_user``.
     """
@@ -201,15 +216,43 @@ def delete_history(user: CurrentUser) -> DeleteResponse:
 
 
 @app.get(
+    "/profile",
+    response_model=ProfileResponse,
+    tags=["user"],
+    dependencies=[Depends(require_role(["assistant_user", "viewer", "admin"]))],
+)
+def get_profile(user: CurrentUser) -> ProfileResponse:
+    """Return the authenticated user's profile."""
+    profile = fs.get_user_profile(user["uid"])
+    return ProfileResponse(**profile)
+
+
+@app.put(
+    "/profile",
+    response_model=ProfileResponse,
+    tags=["user"],
+    dependencies=[Depends(require_role(["assistant_user"]))],
+)
+def update_profile(body: ProfileUpdateRequest, user: CurrentUser) -> ProfileResponse:
+    """Update editable profile fields (nombre, preferencias, notas).
+
+    Requires role: ``assistant_user``.
+    """
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if updates:
+        fs.update_user_profile(user["uid"], updates)
+    profile = fs.get_user_profile(user["uid"])
+    return ProfileResponse(**profile)
+
+
+@app.get(
     "/admin/sessions",
     response_model=AdminSessionsResponse,
     tags=["admin"],
     dependencies=[Depends(require_role(["admin"]))],
 )
 def admin_sessions(user: CurrentUser) -> AdminSessionsResponse:
-    """Return a summary of all active sessions.
-
-    Intended for the admin dashboard.
+    """Return a summary of all active sessions (admin dashboard).
 
     Requires role: ``admin``.
     """
@@ -226,8 +269,11 @@ def admin_sessions(user: CurrentUser) -> AdminSessionsResponse:
 
 
 # ---------------------------------------------------------------------------
-# Static files — must be mounted LAST so API routes take priority
+# Static files — prefer built React dist, fall back to raw frontend dir
+# Must be mounted LAST so API routes take priority
 # ---------------------------------------------------------------------------
-_frontend = Path(__file__).parent.parent / "frontend"
-if _frontend.exists():
-    app.mount("/", StaticFiles(directory=str(_frontend), html=True), name="frontend")
+_frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
+_frontend_src = Path(__file__).parent.parent / "frontend"
+_serve_dir = _frontend_dist if _frontend_dist.exists() else _frontend_src
+if _serve_dir.exists():
+    app.mount("/", StaticFiles(directory=str(_serve_dir), html=True), name="frontend")

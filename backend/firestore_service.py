@@ -9,30 +9,95 @@ from google.cloud import firestore
 SESSIONS_COLLECTION = "sessions"
 
 
-# ---------------------------------------------------------------------------
-# Client (singleton)
-# ---------------------------------------------------------------------------
-
 @lru_cache(maxsize=1)
 def _get_db() -> firestore.Client:
-    """Return a cached synchronous Firestore client."""
     return firestore.Client()
 
 
+def _empty_profile(uid: str) -> dict[str, Any]:
+    return {
+        "cliente_id": uid,
+        "nombre": "",
+        "email": "",
+        "preferencias": [],
+        "notas": "",
+        "fecha_ultimo_ingreso": None,
+    }
+
+
 # ---------------------------------------------------------------------------
-# Public API
+# Profile API
+# ---------------------------------------------------------------------------
+
+def get_user_profile(uid: str) -> dict[str, Any]:
+    try:
+        doc = _get_db().collection(SESSIONS_COLLECTION).document(uid).get()
+        if not doc.exists:
+            return _empty_profile(uid)
+        data = doc.to_dict()
+        return {
+            "cliente_id": data.get("cliente_id", uid),
+            "nombre": data.get("nombre", ""),
+            "email": data.get("email", ""),
+            "preferencias": data.get("preferencias", []),
+            "notas": data.get("notas", ""),
+            "fecha_ultimo_ingreso": str(data["fecha_ultimo_ingreso"])
+            if data.get("fecha_ultimo_ingreso")
+            else None,
+        }
+    except Exception as exc:
+        print(f"[firestore] get_user_profile error for uid={uid!r}: {exc}")
+        return _empty_profile(uid)
+
+
+def update_user_profile(uid: str, updates: dict[str, Any]) -> None:
+    try:
+        ref = _get_db().collection(SESSIONS_COLLECTION).document(uid)
+        updates["updated_at"] = firestore.SERVER_TIMESTAMP
+        ref.set(updates, merge=True)
+    except Exception as exc:
+        print(f"[firestore] update_user_profile error for uid={uid!r}: {exc}")
+
+
+def touch_last_login(uid: str, email: str = "", nombre: str = "") -> None:
+    try:
+        ref = _get_db().collection(SESSIONS_COLLECTION).document(uid)
+        doc = ref.get()
+        now_iso = datetime.now(timezone.utc).isoformat()
+        if not doc.exists:
+            ref.set(
+                {
+                    "cliente_id": uid,
+                    "uid": uid,
+                    "nombre": nombre,
+                    "email": email,
+                    "preferencias": [],
+                    "notas": "",
+                    "messages": [],
+                    "fecha_ultimo_ingreso": now_iso,
+                    "created_at": firestore.SERVER_TIMESTAMP,
+                    "updated_at": firestore.SERVER_TIMESTAMP,
+                }
+            )
+        else:
+            update_data: dict[str, Any] = {
+                "fecha_ultimo_ingreso": now_iso,
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            }
+            if email:
+                update_data["email"] = email
+            if nombre:
+                update_data["nombre"] = nombre
+            ref.set(update_data, merge=True)
+    except Exception as exc:
+        print(f"[firestore] touch_last_login error for uid={uid!r}: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# History API
 # ---------------------------------------------------------------------------
 
 def get_session_history(uid: str) -> list[dict[str, Any]]:
-    """Return the message history for a user session.
-
-    Args:
-        uid: Firebase user ID used as the Firestore document ID.
-
-    Returns:
-        List of message dicts stored in the ``messages`` array field,
-        or an empty list if the document does not exist.
-    """
     try:
         doc = _get_db().collection(SESSIONS_COLLECTION).document(uid).get()
         if not doc.exists:
@@ -43,76 +108,55 @@ def get_session_history(uid: str) -> list[dict[str, Any]]:
         return []
 
 
-def save_message(
-    uid: str,
-    role: str,
-    content: str,
-    tokens: int = 0,
-) -> None:
-    """Append a message to the user's session document.
-
-    Creates the session document if it does not yet exist.
-
-    Args:
-        uid: Firebase user ID / Firestore document ID.
-        role: Message author – typically ``"user"`` or ``"assistant"``.
-        content: Text body of the message.
-        tokens: Number of tokens consumed by this message (default 0).
-    """
+def save_message(uid: str, role: str, content: str, tokens: int = 0) -> None:
     message = {
         "role": role,
         "content": content,
-        "timestamp": datetime.now(timezone.utc).isoformat(),  # SERVER_TIMESTAMP invalid inside ArrayUnion
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "tokens_used": tokens,
     }
-
     db = _get_db()
     ref = db.collection(SESSIONS_COLLECTION).document(uid)
-
     try:
-        ref.set(
-            {
-                "uid": uid,
-                "updated_at": firestore.SERVER_TIMESTAMP,
-                "messages": firestore.ArrayUnion([message]),
-            },
-            merge=True,  # creates the document if absent, otherwise merges
-        )
-
-        # Ensure base fields exist on first write without overwriting later updates.
-        ref.set(
-            {
-                "uid": uid,
-                "email": "",
-                "created_at": firestore.SERVER_TIMESTAMP,
-            },
-            merge=True,
-        )
+        doc = ref.get()
+        if not doc.exists:
+            ref.set(
+                {
+                    "cliente_id": uid,
+                    "uid": uid,
+                    "nombre": "",
+                    "email": "",
+                    "preferencias": [],
+                    "notas": "",
+                    "messages": [message],
+                    "created_at": firestore.SERVER_TIMESTAMP,
+                    "updated_at": firestore.SERVER_TIMESTAMP,
+                }
+            )
+        else:
+            ref.set(
+                {
+                    "updated_at": firestore.SERVER_TIMESTAMP,
+                    "messages": firestore.ArrayUnion([message]),
+                },
+                merge=True,
+            )
     except Exception as exc:
         print(f"[firestore] save_message error for uid={uid!r}: {exc}")
 
 
 def clear_session(uid: str) -> None:
-    """Delete the session document for a user.
-
-    Args:
-        uid: Firebase user ID / Firestore document ID.
-    """
+    """Clear the message history but preserve user profile data."""
     try:
-        _get_db().collection(SESSIONS_COLLECTION).document(uid).delete()
+        _get_db().collection(SESSIONS_COLLECTION).document(uid).set(
+            {"messages": [], "updated_at": firestore.SERVER_TIMESTAMP},
+            merge=True,
+        )
     except Exception as exc:
         print(f"[firestore] clear_session error for uid={uid!r}: {exc}")
 
 
 def get_all_sessions() -> list[dict[str, Any]]:
-    """Return a summary of every session in the collection.
-
-    Intended for ``admin`` and ``viewer`` roles.
-
-    Returns:
-        List of dicts, each containing:
-        ``id``, ``uid``, ``email``, ``updated_at``, ``message_count``.
-    """
     try:
         docs = _get_db().collection(SESSIONS_COLLECTION).stream()
         sessions: list[dict[str, Any]] = []
@@ -121,9 +165,12 @@ def get_all_sessions() -> list[dict[str, Any]]:
             sessions.append(
                 {
                     "id": doc.id,
+                    "cliente_id": data.get("cliente_id", doc.id),
                     "uid": data.get("uid", ""),
+                    "nombre": data.get("nombre", ""),
                     "email": data.get("email", ""),
                     "updated_at": data.get("updated_at"),
+                    "fecha_ultimo_ingreso": data.get("fecha_ultimo_ingreso"),
                     "message_count": len(data.get("messages", [])),
                 }
             )
