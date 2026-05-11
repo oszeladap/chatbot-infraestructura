@@ -431,18 +431,62 @@
 
 /* ══════════════════════════════════════════════
    RESPONSIVE — MOBILE (≤ 768px)
+   Header becomes 2 rows so all buttons stay visible
 ══════════════════════════════════════════════ */
 @media (max-width: 768px) {
-  .chat-header   { padding: 8px 10px; gap: 5px; min-height: 48px; }
+  /* Header wraps into 2 rows */
+  .chat-header {
+    flex-wrap: wrap;
+    padding: 7px 10px 5px;
+    gap: 4px;
+    row-gap: 5px;
+    min-height: auto;
+  }
+
+  /* Row 1: hamburger (order 1) + title (order 2) */
+  .btn-icon      { order: 1; flex-shrink: 0; }
+  .chat-logo     { display: none; }
+  .chat-title    { order: 2; flex: 1; font-size: .88rem; min-width: 0; }
   .chat-title-sub { display: none; }
-  .user-name     { display: none; }
-  .role-badge    { display: none; }
+
+  /* Row 2: header-right takes full width → wraps below */
+  .header-right {
+    order: 3;
+    flex-basis: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    gap: 5px;
+    padding-bottom: 2px;
+    /* Hide scrollbar visually but keep functionality */
+    scrollbar-width: none;
+  }
+  .header-right::-webkit-scrollbar { display: none; }
+
+  /* Show user info compactly on row 2 */
+  .user-name {
+    display: block;
+    font-size: .68rem;
+    max-width: 130px;
+    opacity: .9;
+  }
+  .role-badge {
+    display: inline-flex;
+    font-size: .6rem;
+    flex-shrink: 0;
+  }
+
+  /* Show button text (row 2 has enough space) */
+  .btn-header span { display: inline; }
+  .btn-header {
+    padding: 5px 10px;
+    font-size: .76rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
   .bubble-row    { max-width: 94%; }
   .messages-area { padding: 12px 10px; gap: 10px; }
   .nav-tab       { padding: 8px 13px; font-size: .8rem; }
-  .btn-header span { display: none; }
-  .btn-header    { padding: 6px 8px; }
-  .chat-logo     { display: none; }
   .bubble-chip   { font-size: .62rem; padding: 1px 7px; }
   .bubble-md     { font-size: .86rem; }
   .md-table      { font-size: .78rem; }
@@ -462,7 +506,8 @@
   .history-banner { font-size: .75rem; padding: 7px 12px; }
   .empty-state   { padding: 16px 12px; }
   .empty-state-icon { font-size: 2.2rem; }
-  /* Stack header buttons that can be hidden */
   .hide-xs       { display: none; }
   .btn-new-chat-lg { padding: 9px 20px; font-size: .86rem; }
+  /* Compact buttons on very small screens */
+  .btn-header    { padding: 5px 8px; font-size: .72rem; }
 }

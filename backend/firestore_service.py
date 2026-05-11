@@ -108,13 +108,15 @@ def get_session_history(uid: str) -> list[dict[str, Any]]:
         return []
 
 
-def save_message(uid: str, role: str, content: str, tokens: int = 0) -> None:
+def save_message(uid: str, role: str, content: str, tokens: int = 0, session_id: str | None = None) -> None:
     message = {
         "role": role,
         "content": content,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "tokens_used": tokens,
     }
+    if session_id:
+        message["session_id"] = session_id
     db = _get_db()
     ref = db.collection(SESSIONS_COLLECTION).document(uid)
     try:

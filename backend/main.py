@@ -171,8 +171,8 @@ def chat(
         )
 
     try:
-        fs.save_message(uid=uid, role="user", content=body.message, tokens=0)
-        fs.save_message(uid=uid, role="assistant", content=reply, tokens=tokens)
+        fs.save_message(uid=uid, role="user", content=body.message, tokens=0, session_id=session_id)
+        fs.save_message(uid=uid, role="assistant", content=reply, tokens=tokens, session_id=session_id)
     except Exception as exc:
         print(f"[main] Firestore write error: {exc}")
         raise HTTPException(

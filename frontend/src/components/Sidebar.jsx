@@ -10,14 +10,23 @@ export function groupIntoSessions(messages) {
   let current = [sorted[0]]
 
   for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1]
+    const curr = sorted[i]
+
+    // Group by session_id when both messages have one and they differ
+    const hasSids = prev.session_id && curr.session_id
+    const sidChanged = hasSids && prev.session_id !== curr.session_id
+
+    // Fall back to 3-hour time gap for legacy messages without session_id
     const gapH =
-      (new Date(sorted[i].timestamp ?? 0) - new Date(sorted[i - 1].timestamp ?? 0)) /
-      3_600_000
-    if (gapH > 3) {
+      (new Date(curr.timestamp ?? 0) - new Date(prev.timestamp ?? 0)) / 3_600_000
+    const bigGap = !hasSids && gapH > 3
+
+    if (sidChanged || bigGap) {
       groups.push(current)
-      current = [sorted[i]]
+      current = [curr]
     } else {
-      current.push(sorted[i])
+      current.push(curr)
     }
   }
   groups.push(current)

@@ -10,14 +10,44 @@ import './Chat.css'
 
 // ── PDF helpers ───────────────────────────────────────────────────────────────
 function cleanTxt(s) {
-  return (s ?? '')
-    .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
-    .replace(/[☀-➿]/g, '')
+  const stripped = (s ?? '')
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\*([^*]+)\*/g, '$1')
     .replace(/`([^`]+)`/g, '$1')
     .replace(/\[Fuente:[^\]]+\]/g, '')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+  return normalizePDF(stripped)
+}
+
+// Normalizes text so jsPDF/Helvetica (WinAnsiEncoding / Latin-1) renders it correctly.
+// Replaces common Unicode chars with ASCII equivalents, then strips everything
+// outside Basic-Latin (U+0020-U+007E) and Latin-1 Supplement (U+00A0-U+00FF).
+function normalizePDF(s) {
+  return (s ?? '')
+    // Smart quotes → straight quotes
+    .replace(/[‘’`´]/g, "'")
+    .replace(/[“”«»]/g, '"')
+    // Dashes
+    .replace(/[–—]/g, '-')
+    // Ellipsis
+    .replace(/…/g, '...')
+    // Bullet
+    .replace(/•/g, '-')
+    // Arrows
+    .replace(/→/g, '->').replace(/←/g, '<-')
+    .replace(/⇒/g, '=>').replace(/⇐/g, '<=')
+    // Math
+    .replace(/×/g, 'x').replace(/÷/g, '/')
+    .replace(/∞/g, 'inf').replace(/≈/g, '~')
+    .replace(/≠/g, '!=').replace(/≤/g, '<=').replace(/≥/g, '>=')
+    // Remove emoji and symbol blocks
+    .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
+    .replace(/[☀-➿]/gu, '')
+    .replace(/[℀-⅟]/gu, '')
+    .replace(/[①-◿]/gu, '')
+    // Final strip: keep only Basic Latin + Latin-1 Supplement
+    .replace(/[^\x20-\x7E\xA0-\xFF]/g, '')
+    .replace(/\s+/g, ' ')
     .trim()
 }
 
@@ -185,7 +215,7 @@ async function exportPDF(messages, userEmail) {
   // ── SECCIONES ─────────────────────────────────────────────────────────────
   const SECTIONS = [
     {
-      title: 'COSTOS DE VIAJE EN VUELO Y BUS — COMPARATIVAS',
+      title: 'COSTOS DE VIAJE EN VUELO Y BUS - COMPARATIVAS',
       sub:   'Tarifas aereas y terrestres con comparativa de operadores',
       hc: [21, 101, 160], rc: [235, 244, 255], ra: [215, 232, 255],
       rx: /vuelo|avio|aerolin|latam|sky|avianca|jetsmart|bus\b|cruz del sur|oltursa|tepsa|aeropuerto|terminal|boleto|pasaje|tarifa/i,
@@ -346,6 +376,7 @@ export default function Chat() {
   // True when displaying a read-only historical session
   const [isHistoryView,   setIsHistoryView]   = useState(false)
 
+  const [sessionId,   setSessionId]   = useState(() => crypto.randomUUID())
   const [input,       setInput]       = useState('')
   const [typing,      setTyping]      = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768)
@@ -396,6 +427,7 @@ export default function Chat() {
   const newChat = useCallback(() => {
     fetchAllHistory()
     setMessages([])
+    setSessionId(crypto.randomUUID())
     setActiveSessionIdx(null)
     setIsHistoryView(false)
     if (window.innerWidth <= 768) setSidebarOpen(false)
@@ -419,7 +451,7 @@ export default function Chat() {
     try {
       const res = await apiFetch('/chat', {
         method: 'POST',
-        body: JSON.stringify({ message: text, session_id: null }),
+        body: JSON.stringify({ message: text, session_id: sessionId }),
       })
       setTyping(false)
 
@@ -438,8 +470,8 @@ export default function Chat() {
       const now = new Date().toISOString()
       setAllHistory(prev => [
         ...prev,
-        { role: 'user',      content: text,       timestamp: now },
-        { role: 'assistant', content: data.reply, timestamp: now },
+        { role: 'user',      content: text,       timestamp: now, session_id: sessionId },
+        { role: 'assistant', content: data.reply, timestamp: now, session_id: sessionId },
       ])
     } catch (err) {
       setTyping(false)
