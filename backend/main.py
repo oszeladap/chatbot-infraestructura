@@ -361,5 +361,21 @@ def admin_delete_user(uid: str, user: CurrentUser) -> DeleteResponse:
 _frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
 _frontend_src = Path(__file__).parent.parent / "frontend"
 _serve_dir = _frontend_dist if _frontend_dist.exists() else _frontend_src
+
+# Serve index.html with no-cache so browsers always get the latest JS references.
+# JS/CSS assets are safe to cache (they have content-hash filenames).
+@app.get("/", include_in_schema=False)
+@app.get("/{full_path:path}", include_in_schema=False)
+async def serve_spa(full_path: str = ""):
+    from fastapi.responses import FileResponse, Response
+    # Let API routes take priority (they are registered before this catch-all)
+    index = _serve_dir / "index.html"
+    if not index.exists():
+        return Response("Frontend not built", status_code=503)
+    return FileResponse(
+        str(index),
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
+
 if _serve_dir.exists():
-    app.mount("/", StaticFiles(directory=str(_serve_dir), html=True), name="frontend")
+    app.mount("/assets", StaticFiles(directory=str(_serve_dir / "assets")), name="assets")
