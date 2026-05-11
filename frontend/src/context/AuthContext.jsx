@@ -21,11 +21,18 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        const token  = await user.getIdToken(true)
-        const claims = decodeJwt(token)
+        // Try to get a fresh token with the latest custom claims.
+        // If this fails (network issue, etc.) we still recognise the user
+        // as authenticated — just with a null role until the next refresh.
+        try {
+          const token  = await user.getIdToken(true)
+          const claims = decodeJwt(token)
+          setRole(claims.role ?? null)
+          sessionStorage.setItem('firebase_token', token)
+        } catch {
+          setRole(null)
+        }
         setFirebaseUser(user)
-        setRole(claims.role ?? null)
-        sessionStorage.setItem('firebase_token', token)
       } else {
         setFirebaseUser(null)
         setRole(null)
@@ -37,7 +44,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   const getToken = useCallback(async () => {
-    if (!firebaseUser) throw new Error('AUTH_NULL: Sin usuario autenticado. Recarga la página.')
+    if (!firebaseUser) throw new Error('Sin sesión activa.')
     return firebaseUser.getIdToken(false)
   }, [firebaseUser])
 
