@@ -7,11 +7,12 @@ export default defineConfig({
     port: 5173,
     // Proxy API requests to FastAPI during development
     proxy: {
-      '/chat':           'http://localhost:8000',
-      '/history':        'http://localhost:8000',
-      '/profile':        'http://localhost:8000',
-      '/health':         'http://localhost:8000',
-      '/admin':          'http://localhost:8000',
+      '/chat':    'http://localhost:8000',
+      '/chats':   'http://localhost:8000',
+      '/history': 'http://localhost:8000',
+      '/profile': 'http://localhost:8000',
+      '/health':  'http://localhost:8000',
+      '/admin':   'http://localhost:8000',
     },
   },
   build: {

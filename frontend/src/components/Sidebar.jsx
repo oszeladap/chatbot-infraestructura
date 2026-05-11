@@ -1,52 +1,34 @@
-// ── Session grouping (exported for use in Chat.jsx) ──────────────────────────
-export function groupIntoSessions(messages) {
-  if (!messages || messages.length === 0) return []
+// ── Chat date formatting from chat_id (YYYYMMDD_HHmmss_mmm) ──────────────────
+function formatChatId(chatId) {
+  if (!chatId || chatId.length < 13) return chatId ?? ''
+  // Parse YYYYMMDD_HHmmss
+  const Y  = chatId.slice(0, 4)
+  const M  = chatId.slice(4, 6)
+  const D  = chatId.slice(6, 8)
+  const h  = chatId.slice(9, 11)
+  const m  = chatId.slice(11, 13)
+  const date = new Date(`${Y}-${M}-${D}T${h}:${m}:00`)
+  if (isNaN(date)) return chatId
 
-  const sorted = [...messages].sort(
-    (a, b) => new Date(a.timestamp ?? 0) - new Date(b.timestamp ?? 0)
-  )
-
-  const groups = []
-  let current = [sorted[0]]
-
-  for (let i = 1; i < sorted.length; i++) {
-    const prev = sorted[i - 1]
-    const curr = sorted[i]
-
-    // Group by session_id when both messages have one and they differ
-    const hasSids = prev.session_id && curr.session_id
-    const sidChanged = hasSids && prev.session_id !== curr.session_id
-
-    // Fall back to 3-hour time gap for legacy messages without session_id
-    const gapH =
-      (new Date(curr.timestamp ?? 0) - new Date(prev.timestamp ?? 0)) / 3_600_000
-    const bigGap = !hasSids && gapH > 3
-
-    if (sidChanged || bigGap) {
-      groups.push(current)
-      current = [curr]
-    } else {
-      current.push(curr)
-    }
-  }
-  groups.push(current)
-
-  return groups.reverse() // most-recent first
-}
-
-function fmtDate(ts) {
-  if (!ts) return ''
-  const d   = new Date(ts)
   const now = new Date()
-  if (d.toDateString() === now.toDateString())
-    return d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
-  if (d.toDateString() === new Date(now - 86_400_000).toDateString())
-    return 'Ayer ' + d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
-  return d.toLocaleDateString('es', { day: '2-digit', month: 'short', year: '2-digit' })
+  if (date.toDateString() === now.toDateString()) {
+    return 'Hoy ' + date.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
+  }
+  const yesterday = new Date(now - 86_400_000)
+  if (date.toDateString() === yesterday.toDateString()) {
+    return 'Ayer ' + date.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
+  }
+  return (
+    date.toLocaleDateString('es', { day: '2-digit', month: 'short' }) +
+    ' ' +
+    date.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
+  )
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function Sidebar({ sessions, activeIdx, onSelect, onNewChat }) {
+export default function Sidebar({ chats, activeChatId, onSelect, onNewChat }) {
+  const consultaCount = (chat) => Math.floor((chat.message_count ?? 0) / 2)
+
   return (
     <div className="sidebar-list">
       <button className="sidebar-new-chat" onClick={onNewChat}>
@@ -58,28 +40,27 @@ export default function Sidebar({ sessions, activeIdx, onSelect, onNewChat }) {
         Nuevo Chat
       </button>
 
-      {sessions.length === 0 && (
+      {chats.length === 0 && (
         <div className="sidebar-empty">Sin historial aún.<br/>Empieza una consulta.</div>
       )}
 
-      {sessions.map((session, i) => {
-        const firstUser  = session.find(m => m.role === 'user')
-        const preview    = (firstUser?.content ?? '').slice(0, 54)
-        const userCount  = session.filter(m => m.role === 'user').length
-        const dateLabel  = fmtDate(session[0]?.timestamp)
-
+      {chats.map((chat) => {
+        const count   = consultaCount(chat)
+        const preview = (chat.preview ?? '').slice(0, 54)
         return (
           <button
-            key={i}
-            className={`session-item ${activeIdx === i ? 'session-active' : ''}`}
-            onClick={() => onSelect(session, i)}
+            key={chat.chat_id}
+            className={`session-item ${activeChatId === chat.chat_id ? 'session-active' : ''}`}
+            onClick={() => onSelect(chat.chat_id)}
           >
             <div className="session-meta">
-              <span className="session-date">{dateLabel}</span>
-              <span className="session-count">{userCount} consulta{userCount !== 1 ? 's' : ''}</span>
+              <span className="session-date">{formatChatId(chat.chat_id)}</span>
+              <span className="session-count">
+                {count} consulta{count !== 1 ? 's' : ''}
+              </span>
             </div>
             <p className="session-preview">
-              {preview}{preview.length >= 54 ? '…' : ''}
+              {preview || '(chat vacío)'}{preview.length >= 54 ? '…' : ''}
             </p>
           </button>
         )

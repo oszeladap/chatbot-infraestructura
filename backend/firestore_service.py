@@ -7,6 +7,7 @@ from typing import Any
 from google.cloud import firestore
 
 SESSIONS_COLLECTION = "sessions"
+CHATS_SUBCOLLECTION  = "chats"
 
 
 @lru_cache(maxsize=1)
@@ -180,3 +181,100 @@ def get_all_sessions() -> list[dict[str, Any]]:
     except Exception as exc:
         print(f"[firestore] get_all_sessions error: {exc}")
         return []
+
+
+# ---------------------------------------------------------------------------
+# Chat API  (subcollection: sessions/{uid}/chats/{chat_id})
+# chat_id format: YYYYMMDD_HHmmss_mmm  — date-based, newest sorts last lexicographically
+# ---------------------------------------------------------------------------
+
+def _chats_col(uid: str):
+    return (
+        _get_db()
+        .collection(SESSIONS_COLLECTION)
+        .document(uid)
+        .collection(CHATS_SUBCOLLECTION)
+    )
+
+
+def save_chat_message(uid: str, chat_id: str, role: str, content: str, tokens: int = 0) -> None:
+    message: dict[str, Any] = {
+        "role": role,
+        "content": content,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "tokens_used": tokens,
+    }
+    ref = _chats_col(uid).document(chat_id)
+    try:
+        doc = ref.get()
+        if not doc.exists:
+            ref.set(
+                {
+                    "chat_id": chat_id,
+                    "uid": uid,
+                    "messages": [message],
+                    "preview": content[:80] if role == "user" else "",
+                    "created_at_iso": datetime.now(timezone.utc).isoformat(),
+                    "created_at": firestore.SERVER_TIMESTAMP,
+                    "updated_at": firestore.SERVER_TIMESTAMP,
+                }
+            )
+        else:
+            update: dict[str, Any] = {
+                "messages": firestore.ArrayUnion([message]),
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            }
+            data = doc.to_dict()
+            if role == "user" and not data.get("preview"):
+                update["preview"] = content[:80]
+            ref.set(update, merge=True)
+    except Exception as exc:
+        print(f"[firestore] save_chat_message error uid={uid!r} chat_id={chat_id!r}: {exc}")
+
+
+def get_chat_messages(uid: str, chat_id: str) -> list[dict[str, Any]]:
+    try:
+        doc = _chats_col(uid).document(chat_id).get()
+        if not doc.exists:
+            return []
+        return doc.to_dict().get("messages", [])
+    except Exception as exc:
+        print(f"[firestore] get_chat_messages error uid={uid!r} chat_id={chat_id!r}: {exc}")
+        return []
+
+
+def list_chats(uid: str) -> list[dict[str, Any]]:
+    try:
+        docs = _chats_col(uid).stream()
+        result: list[dict[str, Any]] = []
+        for doc in docs:
+            data = doc.to_dict()
+            result.append(
+                {
+                    "chat_id": doc.id,
+                    "preview": data.get("preview", ""),
+                    "created_at": data.get("created_at_iso", doc.id),
+                    "message_count": len(data.get("messages", [])),
+                }
+            )
+        # Sort newest-first using the chat_id string (YYYYMMDD_HHmmss_mmm is lexicographically chronological)
+        result.sort(key=lambda x: x["chat_id"], reverse=True)
+        return result
+    except Exception as exc:
+        print(f"[firestore] list_chats error uid={uid!r}: {exc}")
+        return []
+
+
+def delete_chat(uid: str, chat_id: str) -> None:
+    try:
+        _chats_col(uid).document(chat_id).delete()
+    except Exception as exc:
+        print(f"[firestore] delete_chat error uid={uid!r} chat_id={chat_id!r}: {exc}")
+
+
+def delete_all_chats(uid: str) -> None:
+    try:
+        for doc in _chats_col(uid).stream():
+            doc.reference.delete()
+    except Exception as exc:
+        print(f"[firestore] delete_all_chats error uid={uid!r}: {exc}")

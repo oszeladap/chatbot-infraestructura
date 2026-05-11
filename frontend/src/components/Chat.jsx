@@ -1,12 +1,23 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { signOut } from 'firebase/auth'
 import { auth } from '../firebase'
 import { useAuth } from '../context/AuthContext'
 import { useApi } from '../hooks/useApi'
-import Sidebar, { groupIntoSessions } from './Sidebar'
+import Sidebar from './Sidebar'
 import MessageBubble from './MessageBubble'
 import AdminPanel from './AdminPanel'
 import './Chat.css'
+
+// Generate a date-based chat ID: YYYYMMDD_HHmmss_mmm
+function generateChatId() {
+  const n   = new Date()
+  const pad = (v, d = 2) => String(v).padStart(d, '0')
+  return (
+    `${n.getFullYear()}${pad(n.getMonth() + 1)}${pad(n.getDate())}` +
+    `_${pad(n.getHours())}${pad(n.getMinutes())}${pad(n.getSeconds())}` +
+    `_${pad(n.getMilliseconds(), 3)}`
+  )
+}
 
 // ── PDF helpers ───────────────────────────────────────────────────────────────
 function cleanTxt(s) {
@@ -367,16 +378,17 @@ export default function Chat() {
   const { firebaseUser, role } = useAuth()
   const { apiFetch }           = useApi()
 
-  // All messages ever saved in Firestore (for sidebar sessions)
-  const [allHistory,      setAllHistory]      = useState([])
-  // Currently displayed messages in the chat area
-  const [messages,        setMessages]        = useState([])
-  // Which session index is being viewed (null = new chat / live mode)
-  const [activeSessionIdx, setActiveSessionIdx] = useState(null)
-  // True when displaying a read-only historical session
-  const [isHistoryView,   setIsHistoryView]   = useState(false)
+  // List of chats for sidebar: [{chat_id, preview, created_at, message_count}]
+  const [chatList,       setChatList]       = useState([])
+  // Currently active chat ID (date-based string)
+  const [chatId,         setChatId]         = useState(() => generateChatId())
+  // Messages displayed in the chat area
+  const [messages,       setMessages]       = useState([])
+  // ID of the chat being viewed in read-only mode (null = live mode)
+  const [activeChatId,   setActiveChatId]   = useState(null)
+  // True when displaying a read-only historical chat
+  const [isHistoryView,  setIsHistoryView]  = useState(false)
 
-  const [sessionId,   setSessionId]   = useState(() => crypto.randomUUID())
   const [input,       setInput]       = useState('')
   const [typing,      setTyping]      = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768)
@@ -387,25 +399,24 @@ export default function Chat() {
 
   const email   = firebaseUser?.email ?? firebaseUser?.displayName ?? 'Usuario'
   const isAdmin = role === 'admin'
+  // Abbreviated email for compact display
+  const emailShort = email.includes('@') ? email.split('@')[0] : email
 
-  // Sessions derived from allHistory
-  const sessions = useMemo(() => groupIntoSessions(allHistory), [allHistory])
-
-  // ── Fetch all history (for sidebar) — do NOT display in chat ──────────────
-  const fetchAllHistory = useCallback(async () => {
+  // ── Fetch chat list for sidebar ───────────────────────────────────────────
+  const fetchChatList = useCallback(async () => {
     try {
-      const res = await apiFetch('/history')
+      const res = await apiFetch('/chats')
       if (!res.ok) return
       const data = await res.json()
-      setAllHistory(data.messages ?? [])
+      setChatList(data.chats ?? [])
     } catch (err) {
-      console.warn('[fetchAllHistory]', err.message)
+      console.warn('[fetchChatList]', err.message)
     }
   }, [apiFetch])
 
-  useEffect(() => { fetchAllHistory() }, [fetchAllHistory])
+  useEffect(() => { fetchChatList() }, [fetchChatList])
 
-  // Scroll to bottom whenever messages or typing changes
+  // Scroll to bottom whenever messages or typing change
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, typing])
 
   // Collapse sidebar on mobile resize
@@ -415,23 +426,31 @@ export default function Chat() {
     return () => window.removeEventListener('resize', onResize)
   }, [])
 
-  // ── Session selection from sidebar ────────────────────────────────────────
-  const selectSession = useCallback((sessionMsgs, idx) => {
-    setMessages(sessionMsgs.map(m => ({ role: m.role, content: m.content ?? '' })))
-    setActiveSessionIdx(idx)
-    setIsHistoryView(true)
+  // ── Select a historical chat from sidebar ─────────────────────────────────
+  const selectChat = useCallback(async (selectedChatId) => {
+    try {
+      const res = await apiFetch(`/chats/${selectedChatId}`)
+      if (!res.ok) return
+      const data = await res.json()
+      setMessages((data.messages ?? []).map(m => ({ role: m.role, content: m.content ?? '' })))
+      setActiveChatId(selectedChatId)
+      setIsHistoryView(true)
+    } catch (err) {
+      console.warn('[selectChat]', err.message)
+    }
     if (window.innerWidth <= 768) setSidebarOpen(false)
-  }, [])
+  }, [apiFetch])
 
   // ── New chat ──────────────────────────────────────────────────────────────
   const newChat = useCallback(() => {
-    fetchAllHistory()
+    const newId = generateChatId()
+    setChatId(newId)
     setMessages([])
-    setSessionId(crypto.randomUUID())
-    setActiveSessionIdx(null)
+    setActiveChatId(null)
     setIsHistoryView(false)
+    fetchChatList()              // refresh sidebar to show last saved chat
     if (window.innerWidth <= 768) setSidebarOpen(false)
-  }, [fetchAllHistory])
+  }, [fetchChatList])
 
   // ── Send message ──────────────────────────────────────────────────────────
   const sendMessage = async (e) => {
@@ -439,19 +458,17 @@ export default function Chat() {
     const text = input.trim()
     if (!text || typing) return
 
-    const userMsg = { role: 'user', content: text }
-    setMessages(prev => [...prev, userMsg])
+    setMessages(prev => [...prev, { role: 'user', content: text }])
     setInput('')
     if (inputRef.current) inputRef.current.style.height = '42px'
     setTyping(true)
-    // Switch to live mode when sending
     setIsHistoryView(false)
-    setActiveSessionIdx(null)
+    setActiveChatId(null)
 
     try {
       const res = await apiFetch('/chat', {
         method: 'POST',
-        body: JSON.stringify({ message: text, session_id: sessionId }),
+        body: JSON.stringify({ message: text, chat_id: chatId }),
       })
       setTyping(false)
 
@@ -463,35 +480,34 @@ export default function Chat() {
       }
 
       const data = await res.json()
-      const assistantMsg = { role: 'assistant', content: data.reply, usedSearch: data.used_search }
-      setMessages(prev => [...prev, assistantMsg])
+      setMessages(prev => [...prev, { role: 'assistant', content: data.reply, usedSearch: data.used_search }])
 
-      // Update sidebar history locally (avoid full refetch)
-      const now = new Date().toISOString()
-      setAllHistory(prev => [
-        ...prev,
-        { role: 'user',      content: text,       timestamp: now, session_id: sessionId },
-        { role: 'assistant', content: data.reply, timestamp: now, session_id: sessionId },
-      ])
+      // Update sidebar list: if this chat is new, add it at the top
+      setChatList(prev => {
+        const exists = prev.some(c => c.chat_id === chatId)
+        if (exists) return prev
+        return [{ chat_id: chatId, preview: text.slice(0, 80), created_at: new Date().toISOString(), message_count: 2 }, ...prev]
+      })
     } catch (err) {
       setTyping(false)
       setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${err.message}`, isError: true }])
     }
   }
 
-  // ── Clear ALL history ─────────────────────────────────────────────────────
-  const clearHistory = async () => {
-    if (!confirm('¿Borrar todo el historial de esta sesión?')) return
+  // ── Clear all chats ───────────────────────────────────────────────────────
+  const clearAllChats = async () => {
+    if (!confirm('¿Borrar TODOS los chats del historial?')) return
     try {
-      const res = await apiFetch('/history', { method: 'DELETE' })
+      const res = await apiFetch('/chats', { method: 'DELETE' })
       if (res.ok) {
         setMessages([])
-        setAllHistory([])
-        setActiveSessionIdx(null)
+        setChatList([])
+        setChatId(generateChatId())
+        setActiveChatId(null)
         setIsHistoryView(false)
       }
     } catch (err) {
-      alert(`No se pudo borrar el historial: ${err.message}`)
+      alert(`No se pudo borrar: ${err.message}`)
     }
   }
 
@@ -510,13 +526,22 @@ export default function Chat() {
   return (
     <div className="chat-root">
 
-      {/* Mobile backdrop */}
+      {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />
       )}
 
       {/* Sidebar */}
       <aside className={`sidebar ${sidebarOpen ? '' : 'collapsed'}`}>
+        {/* User info shown inside sidebar */}
+        <div className="sidebar-user-section">
+          <div className="sidebar-user-avatar">{emailShort[0]?.toUpperCase()}</div>
+          <div className="sidebar-user-info">
+            <span className="sidebar-user-email">{emailShort}</span>
+            <span className={`role-badge role-${role ?? 'none'}`}>{role ?? 'sin rol'}</span>
+          </div>
+        </div>
+
         <div className="sidebar-header">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                stroke="currentColor" strokeWidth="2.5">
@@ -524,19 +549,21 @@ export default function Chat() {
           </svg>
           Conversaciones
         </div>
+
         <Sidebar
-          sessions={sessions}
-          activeIdx={activeSessionIdx}
-          onSelect={selectSession}
+          chats={chatList}
+          activeChatId={activeChatId}
+          onSelect={selectChat}
           onNewChat={newChat}
         />
       </aside>
 
-      {/* Main */}
+      {/* Main panel */}
       <div className="chat-main">
 
-        {/* Header */}
+        {/* ── Header (single row — always visible) ── */}
         <header className="chat-header">
+          {/* Hamburger — toggle sidebar / historial */}
           <button className="btn-icon" onClick={() => setSidebarOpen(o => !o)} title="Historial">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
               <rect x="2" y="4"  width="16" height="2" rx="1"/>
@@ -552,12 +579,14 @@ export default function Chat() {
             <span className="chat-title-sub">· Sistema Inteligente</span>
           </div>
 
+          {/* Action buttons */}
           <div className="header-right">
+            {/* User info — desktop only (mobile: shown in sidebar) */}
             <span className="user-name">{email}</span>
             <span className={`role-badge role-${role ?? 'none'}`}>{role ?? 'sin rol'}</span>
 
             {/* Nuevo Chat */}
-            <button className="btn-header" onClick={newChat} title="Nuevo chat en blanco">
+            <button className="btn-header" onClick={newChat} title="Nuevo chat">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
                    stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <line x1="12" y1="5" x2="12" y2="19"/>
@@ -566,9 +595,9 @@ export default function Chat() {
               <span>Nuevo</span>
             </button>
 
-            {/* PDF — solo en chat activo con mensajes */}
+            {/* PDF — only when there are messages */}
             {activeTab === 'chat' && messages.length > 0 && (
-              <button className="btn-header" onClick={() => exportPDF(messages, email)} title="Exportar a PDF">
+              <button className="btn-header" onClick={() => exportPDF(messages, email)} title="Exportar PDF">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
                      stroke="currentColor" strokeWidth="2.2">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -580,9 +609,9 @@ export default function Chat() {
               </button>
             )}
 
-            {/* Borrar historial */}
+            {/* Borrar todos los chats */}
             {(role === 'assistant_user' || role === 'admin') && activeTab === 'chat' && (
-              <button className="btn-header" onClick={clearHistory} title="Borrar historial">
+              <button className="btn-header" onClick={clearAllChats} title="Borrar historial">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
                      stroke="currentColor" strokeWidth="2.2">
                   <polyline points="3 6 5 6 21 6"/>
@@ -594,6 +623,7 @@ export default function Chat() {
               </button>
             )}
 
+            {/* Cerrar sesión */}
             <button className="btn-header" onClick={() => signOut(auth)} title="Cerrar sesión">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
                    stroke="currentColor" strokeWidth="2.2">
@@ -646,9 +676,7 @@ export default function Chat() {
                   <polyline points="12 6 12 12 16 14"/>
                 </svg>
                 Estás viendo un chat del historial — solo lectura
-                <button className="history-banner-btn" onClick={newChat}>
-                  + Nuevo Chat
-                </button>
+                <button className="history-banner-btn" onClick={newChat}>+ Nuevo Chat</button>
               </div>
             )}
 
@@ -663,22 +691,18 @@ export default function Chat() {
                 </div>
               )}
 
-              {messages.map((msg, i) => (
-                <MessageBubble key={i} {...msg} />
-              ))}
+              {messages.map((msg, i) => <MessageBubble key={i} {...msg} />)}
 
               {typing && (
                 <div className="typing-row">
-                  <div className="typing-indicator">
-                    <span/><span/><span/>
-                  </div>
+                  <div className="typing-indicator"><span/><span/><span/></div>
                 </div>
               )}
 
               <div ref={endRef} />
             </div>
 
-            {/* Input */}
+            {/* Input or history placeholder */}
             {!isHistoryView ? (
               <form className="input-area" onSubmit={sendMessage}>
                 <textarea
