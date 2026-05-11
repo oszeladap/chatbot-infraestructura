@@ -360,172 +360,238 @@ async function exportPDF(messages, userEmail) {
   doc.save(`recomendaciones-viaje-peru-${now.toISOString().slice(0, 10)}.pdf`)
 }
 
-// ── PDF Resumen Ejecutivo (max 2 páginas) ─────────────────────────────────────
-async function exportPDFSummary(messages, userEmail) {
+// ── PDF Resumen Ejecutivo — Estructurado con IA ───────────────────────────────
+// Calls the /summary backend endpoint (Mistral extraction) then builds a
+// scannable 1-page PDF with three visual sections: clima | lugares | costos table.
+async function exportPDFSummary(messages, userEmail, chatId, apiFetch) {
   const { jsPDF } = await import('jspdf')
-  const doc   = new jsPDF({ unit: 'pt', format: 'a4' })
-  const pageW = doc.internal.pageSize.getWidth()
-  const pageH = doc.internal.pageSize.getHeight()
-  const M  = 32
-  const CW = pageW - M * 2
-  const LH = 9.5   // compact line height
-  const FS = 7     // compact body font size
-  let y = 0
-  let stopped = false
 
-  // Guard: returns true if there's room; opens a new page if possible (max 2 pages)
-  function fit(needed) {
-    if (stopped) return false
-    if (y + needed <= pageH - 24) return true
-    if (doc.internal.getNumberOfPages() >= 2) { stopped = true; return false }
-    doc.addPage(); y = M
-    return true
+  // 1. Fetch AI-structured summary from backend
+  let s = null
+  try {
+    const res = await apiFetch('/summary', {
+      method: 'POST',
+      body: JSON.stringify({ chat_id: chatId }),
+    })
+    if (res.ok) s = await res.json()
+  } catch (e) {
+    console.warn('[exportPDFSummary]', e.message)
   }
 
-  // ── Encabezado compacto ──────────────────────────────────────────────────
-  doc.setFillColor(30, 80, 150)
-  doc.rect(0, 0, pageW, 46, 'F')
-  doc.setFillColor(232, 184, 75)
-  doc.rect(0, 46, pageW, 4, 'F')
+  const nd = 'No disponible'
+  const safe = v =>
+    (!v || v.toLowerCase().includes('no disponible') || v.toLowerCase().includes('not available'))
+      ? nd
+      : normalizePDF(v)
 
+  if (!s) s = {
+    destino: nd,
+    clima:   { descripcion: nd, temperatura: nd, recomendacion: nd },
+    costos:  {
+      transporte:   { economico: nd, comodo: nd },
+      hospedaje:    { economico: nd, comodo: nd },
+      alimentacion: { economico: nd, comodo: nd },
+      tours:        { economico: nd, comodo: nd },
+    },
+    lugares:  [],
+    consejos: [],
+  }
+
+  // 2. PDF setup
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' })
+  const PW  = doc.internal.pageSize.getWidth()
+  const PH  = doc.internal.pageSize.getHeight()
+  const M   = 32
+  const CW  = PW - M * 2
+  const FS  = 7.5
+  const LH  = 9.5
+  const now = new Date()
+
+  let y = 0
+  const br = needed => { if (y + needed > PH - 24) { doc.addPage(); y = M } }
+
+  // ── Header (46pt + gold stripe) ──────────────────────────────────────────
+  doc.setFillColor(30, 80, 150)
+  doc.rect(0, 0, PW, 46, 'F')
+  doc.setFillColor(232, 184, 75)
+  doc.rect(0, 46, PW, 4, 'F')
   doc.setTextColor(255, 255, 255)
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(13)
   doc.text('RESUMEN EJECUTIVO DE VIAJE - PERU', M, 22)
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(7)
-  const now     = new Date()
-  const dateStr = now.toLocaleDateString('es-PE', { day: '2-digit', month: 'long', year: 'numeric' })
-  const timeStr = now.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })
   doc.setTextColor(180, 200, 240)
-  doc.text(`Fecha: ${dateStr}  Hora: ${timeStr}  |  Usuario: ${userEmail ?? 'N/A'}  |  Sistema Inteligente de Viajes de Peru`, M, 40)
-
+  doc.text(
+    `Fecha: ${now.toLocaleDateString('es-PE',{day:'2-digit',month:'long',year:'numeric'})}  |  ` +
+    `Hora: ${now.toLocaleTimeString('es-PE',{hour:'2-digit',minute:'2-digit'})}  |  ` +
+    `Usuario: ${userEmail ?? 'N/A'}`,
+    M, 40
+  )
   y = 60
 
-  // ── Pares Q/A ────────────────────────────────────────────────────────────
-  const pairs = []
-  for (let i = 0; i < messages.length; i++) {
-    if (messages[i].role === 'user' && !messages[i].isError) {
-      const next = messages[i + 1]
-      if (next?.role === 'assistant' && !next.isError) {
-        pairs.push({ q: messages[i].content ?? '', a: next.content ?? '' })
-      }
-    }
+  // ── Destino strip ─────────────────────────────────────────────────────────
+  const destino = normalizePDF(s.destino || nd).toUpperCase()
+  doc.setFillColor(15, 35, 80)
+  doc.rect(M, y, CW, 22, 'F')
+  doc.setTextColor(232, 184, 75)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(9)
+  doc.text(`DESTINO: ${destino}`, M + 8, y + 15)
+  y += 28
+
+  // ── Two-column: Clima | Lugares ───────────────────────────────────────────
+  const GAP  = 8
+  const LCW  = Math.floor(CW * 0.42)
+  const RCW  = CW - LCW - GAP
+  const LCX  = M
+  const RCX  = M + LCW + GAP
+  const CH   = 18   // column header bar height
+
+  // Pre-calc clima blocks (font must be set before splitTextToSize)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(FS)
+  const clima = s.clima || {}
+  const climaItems = [
+    { lbl: 'Temperatura:', val: safe(clima.temperatura) },
+    { lbl: 'Condicion:',   val: safe(clima.descripcion) },
+    { lbl: 'Llevar:',      val: safe(clima.recomendacion) },
+  ].filter(r => r.val !== nd)
+  const climaBlocks = climaItems.map(r => ({
+    lbl: r.lbl, lines: doc.splitTextToSize(r.val, LCW - 12),
+  }))
+  const climaContentH = climaBlocks.reduce((h, b) => h + LH + b.lines.length * LH + 3, 8)
+  const colLH = CH + Math.max(climaContentH, 80)
+
+  // Pre-calc lugares blocks
+  const lugares = (s.lugares || []).slice(0, 8).map(l => normalizePDF(l)).filter(Boolean)
+  const lugarBlocks = lugares.map(l => doc.splitTextToSize('- ' + l, RCW - 10))
+  const lugarContentH = lugarBlocks.reduce((h, b) => h + b.length * LH + 2, 8)
+  const colRH = CH + Math.max(lugarContentH, 80)
+
+  const TWO_H = Math.max(colLH, colRH)
+  br(TWO_H)
+
+  // Draw left: Clima
+  doc.setFillColor(14, 116, 144)
+  doc.rect(LCX, y, LCW, CH, 'F')
+  doc.setTextColor(255, 255, 255)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(8)
+  doc.text('CONDICIONES CLIMATICAS', LCX + 5, y + 13)
+  doc.setFillColor(236, 254, 255)
+  doc.rect(LCX, y + CH, LCW, TWO_H - CH, 'F')
+  let cy = y + CH + 10
+  doc.setFontSize(FS)
+  for (const { lbl, lines } of climaBlocks) {
+    doc.setFont('helvetica', 'bold');  doc.setTextColor(14, 80, 100)
+    doc.text(lbl, LCX + 5, cy);       cy += LH
+    doc.setFont('helvetica', 'normal'); doc.setTextColor(30, 40, 70)
+    doc.text(lines, LCX + 5, cy);     cy += lines.length * LH + 3
+  }
+  if (climaBlocks.length === 0) {
+    doc.setFont('helvetica', 'italic'); doc.setTextColor(150, 160, 180); doc.setFontSize(FS)
+    doc.text('Sin informacion climatica en esta consulta.', LCX + 5, y + CH + 16)
   }
 
-  // Summary sections — climate and costs first for quick executive scanning
-  const SUM_SECS = [
-    {
-      title: 'CONDICIONES CLIMATICAS',
-      hc: [14, 116, 144], rc: [236, 254, 255],
-      max: 2,
-      rx: /clima|temperatura|lluvia|sol\b|calor|fr[ií]o|humedad|viento|pron[oó]stico|meteorolog/i,
-    },
-    {
-      title: 'COSTOS DE TRANSPORTE — COMPARATIVA ECONOMICO vs COMODO',
-      hc: [21, 101, 160], rc: [235, 244, 255],
-      max: 2,
-      rx: /vuelo|avio|aerolin|latam|sky|avianca|jetsmart|bus\b|cruz del sur|oltursa|tepsa|aeropuerto|terminal|boleto|pasaje|tarifa/i,
-    },
-    {
-      title: 'COSTOS DE HOSPEDAJE — COMPARATIVA ECONOMICO vs COMODO',
-      hc: [45, 106, 79], rc: [236, 253, 245],
-      max: 2,
-      rx: /hotel|hostal|hospedaje|alojamiento|habitaci|lodge|resort|airbnb|posada/i,
-    },
-    {
-      title: 'LUGARES Y ACTIVIDADES DESTACADAS',
-      hc: [109, 40, 217], rc: [245, 243, 255],
-      max: 1,
-      rx: /museo|plaza|parque|iglesia|catedral|ruinas|machu picchu|tour\b|excursion|mirador|atraccion|visitar|lugar/i,
-    },
-    {
-      title: 'RECOMENDACIONES Y DATOS CLAVE',
-      hc: [55, 65, 100], rc: [248, 250, 252],
-      max: 1,
-      rx: /seguridad|consejo|pasaporte|moneda|cambio.*sol|propina|vacuna|altitud|soroche|recomendaci/i,
-    },
+  // Draw right: Lugares
+  doc.setFillColor(109, 40, 217)
+  doc.rect(RCX, y, RCW, CH, 'F')
+  doc.setTextColor(255, 255, 255)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(8)
+  doc.text('LUGARES SUGERIDOS', RCX + 5, y + 13)
+  doc.setFillColor(245, 243, 255)
+  doc.rect(RCX, y + CH, RCW, TWO_H - CH, 'F')
+  let ry = y + CH + 10
+  doc.setFontSize(FS); doc.setFont('helvetica', 'normal'); doc.setTextColor(30, 40, 70)
+  if (lugarBlocks.length > 0) {
+    for (const ll of lugarBlocks) { doc.text(ll, RCX + 5, ry); ry += ll.length * LH + 2 }
+  } else {
+    doc.setFont('helvetica', 'italic'); doc.setTextColor(150, 160, 180)
+    doc.text('Sin lugares especificados en esta consulta.', RCX + 5, ry)
+  }
+
+  y += TWO_H + 10
+
+  // ── Comparativa de costos (table) ─────────────────────────────────────────
+  br(22)
+  doc.setFillColor(21, 101, 160)
+  doc.rect(M, y, CW, 22, 'F')
+  doc.setTextColor(255, 255, 255)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(9)
+  doc.text('COMPARATIVA DE COSTOS — ECONOMICO vs COMODO', M + 8, y + 15)
+  y += 22
+
+  const costos = s.costos || {}
+  const c1W = Math.floor(CW * 0.20)
+  const c2W = Math.floor(CW * 0.40)
+  const c3W = CW - c1W - c2W
+
+  const tRows = [
+    ['Concepto',        'Opcion Economica',                     'Opcion Comoda'],
+    ['Transporte',      safe(costos.transporte?.economico),      safe(costos.transporte?.comodo)],
+    ['Hospedaje',       safe(costos.hospedaje?.economico),       safe(costos.hospedaje?.comodo)],
+    ['Alimentacion',    safe(costos.alimentacion?.economico),    safe(costos.alimentacion?.comodo)],
+    ['Tours / Entradas',safe(costos.tours?.economico),           safe(costos.tours?.comodo)],
   ]
 
-  const usedIdxs = new Set()
+  for (let ri = 0; ri < tRows.length; ri++) {
+    const [lbl, eco, com] = tRows[ri]
+    doc.setFont('helvetica', ri === 0 ? 'bold' : 'normal')
+    doc.setFontSize(FS)
+    const lblLL = doc.splitTextToSize(lbl, c1W - 6)
+    const ecoLL = doc.splitTextToSize(eco, c2W - 8)
+    const comLL = doc.splitTextToSize(com, c3W - 8)
+    const rowH  = Math.max(lblLL.length, ecoLL.length, comLL.length) * LH + 10
+    br(rowH)
+    doc.setFillColor(...(ri === 0 ? [15,35,80] : ri%2===1 ? [235,244,255] : [248,250,255]))
+    doc.setTextColor(...(ri === 0 ? [255,255,255] : [25,35,65]))
+    doc.rect(M, y, CW, rowH, 'F')
+    doc.text(lblLL, M + 4,             y + LH)
+    doc.text(ecoLL, M + c1W + 4,       y + LH)
+    doc.text(comLL, M + c1W + c2W + 4, y + LH)
+    doc.setDrawColor(180, 200, 230); doc.setLineWidth(0.3)
+    doc.rect(M, y, CW, rowH, 'S')
+    doc.line(M + c1W,       y, M + c1W,       y + rowH)
+    doc.line(M + c1W + c2W, y, M + c1W + c2W, y + rowH)
+    y += rowH
+  }
+  y += 10
 
-  for (const sec of SUM_SECS) {
-    if (stopped) break
-
-    const hits = []
-    pairs.forEach((p, idx) => {
-      if (!usedIdxs.has(idx) && sec.rx.test(p.q + ' ' + p.a)) {
-        hits.push(p); usedIdxs.add(idx)
-      }
-    })
-    if (hits.length === 0) continue
-
-    // Section header (20pt)
-    if (!fit(20)) break
-    doc.setFillColor(...sec.hc)
-    doc.rect(M, y, CW, 20, 'F')
+  // ── Consejos ─────────────────────────────────────────────────────────────
+  const consejos = (s.consejos || []).slice(0, 5).map(c => normalizePDF(c)).filter(Boolean)
+  if (consejos.length > 0) {
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(FS)
+    const tipBlocks = consejos.map(c => doc.splitTextToSize('- ' + c, CW - 14))
+    const tipsH = 22 + tipBlocks.reduce((h, l) => h + l.length * LH + 3, 8)
+    br(tipsH)
+    doc.setFillColor(55, 65, 100)
+    doc.rect(M, y, CW, 22, 'F')
     doc.setTextColor(255, 255, 255)
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(8.5)
-    doc.text(sec.title, M + 6, y + 14)
-    y += 20
-
-    for (const pair of hits.slice(0, sec.max)) {
-      if (stopped) break
-
-      // Q compact bar
-      doc.setFont('helvetica', 'bold')
-      doc.setFontSize(FS)
-      const qLines = doc.splitTextToSize(cleanTxt(pair.q), CW - 12)
-      const qH = Math.max(qLines.length * LH + 4, 14)
-      if (!fit(qH)) break
-      doc.setFillColor(210, 218, 238)
-      doc.rect(M, y, CW, qH, 'F')
-      doc.setTextColor(15, 25, 65)
-      doc.text(qLines, M + 6, y + 9)
-      y += qH
-
-      // Answer — condensed plain-text from blocks, max 10 rendered lines
-      const blocks = parseBlocks(pair.a)
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(FS)
-      const flatLines = []
-      for (const b of blocks) {
-        if (b.type === 'table') {
-          for (const row of (b.rows ?? [])) {
-            const wrapped = doc.splitTextToSize(row.join('  |  '), CW - 12)
-            flatLines.push(...wrapped)
-          }
-        } else if (b.text) {
-          const prefix = b.type === 'bullet' ? '- ' : ''
-          const wrapped = doc.splitTextToSize(prefix + b.text, CW - 12)
-          flatLines.push(...wrapped)
-        }
-        if (flatLines.length >= 10) break
-      }
-      const aLines = flatLines.slice(0, 10)
-      const aH = aLines.length * LH + 6
-      if (!fit(aH)) break
-      doc.setFillColor(...sec.rc)
-      doc.rect(M, y, CW, aH, 'F')
-      doc.setTextColor(30, 40, 70)
-      doc.text(aLines, M + 6, y + 9)
-      y += aH + 3
-    }
-    y += 6
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
+    doc.text('RECOMENDACIONES Y CONSEJOS CLAVE', M + 8, y + 15)
+    y += 22
+    const tipsContentH = tipBlocks.reduce((h, l) => h + l.length * LH + 3, 8)
+    doc.setFillColor(248, 250, 252)
+    doc.rect(M, y, CW, tipsContentH, 'F')
+    y += 8
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(FS); doc.setTextColor(30, 40, 70)
+    for (const ll of tipBlocks) { doc.text(ll, M + 6, y); y += ll.length * LH + 3 }
+    y += 4
   }
 
-  // ── Pie de página ────────────────────────────────────────────────────────
+  // ── Footer ────────────────────────────────────────────────────────────────
   const total = doc.internal.getNumberOfPages()
   for (let p = 1; p <= total; p++) {
     doc.setPage(p)
     doc.setFillColor(30, 80, 150)
-    doc.rect(0, pageH - 18, pageW, 18, 'F')
+    doc.rect(0, PH - 18, PW, 18, 'F')
     doc.setTextColor(200, 220, 255)
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(6)
-    doc.text('Sistema Inteligente de Viajes de Peru  |  Resumen Ejecutivo', M, pageH - 5)
-    doc.text(`Pag. ${p} / ${total}`, pageW - M - 28, pageH - 5)
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6)
+    doc.text('Sistema Inteligente de Viajes de Peru  |  Resumen Ejecutivo', M, PH - 5)
+    doc.text(`Pag. ${p} / ${total}`, PW - M - 28, PH - 5)
   }
 
   doc.save(`resumen-ejecutivo-peru-${now.toISOString().slice(0, 10)}.pdf`)
@@ -788,7 +854,7 @@ export default function Chat() {
                   </svg>
                   <span>PDF</span>
                 </button>
-                <button className="btn-header btn-header-gold" onClick={() => exportPDFSummary(messages, email)} title="Resumen ejecutivo PDF (max 2 hojas)">
+                <button className="btn-header btn-header-gold" onClick={() => exportPDFSummary(messages, email, activeChatId || chatId, apiFetch)} title="Resumen ejecutivo PDF (max 2 hojas)">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
                        stroke="currentColor" strokeWidth="2.2">
                     <rect x="3" y="3" width="18" height="18" rx="2"/>

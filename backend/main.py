@@ -131,6 +131,10 @@ class HealthResponse(BaseModel):
     timestamp: str
 
 
+class SummaryRequest(BaseModel):
+    chat_id: str = Field(..., min_length=1, max_length=100)
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -338,6 +342,35 @@ def delete_all_chats_endpoint(user: CurrentUser) -> DeleteResponse:
             detail="No se pudo eliminar los chats.",
         )
     return DeleteResponse(message="Todos los chats eliminados.")
+
+
+@app.post(
+    "/summary",
+    tags=["chat"],
+    dependencies=[Depends(require_role(["assistant_user", "admin"]))],
+)
+def create_summary(body: SummaryRequest, user: CurrentUser) -> dict:
+    """Generate an AI-structured summary of a chat for the executive PDF.
+
+    Calls Mistral with a structured extraction prompt and returns JSON with
+    destino, clima, costos (economico/comodo), lugares and consejos.
+    """
+    try:
+        messages = fs.get_chat_messages(user["uid"], body.chat_id)
+    except Exception as exc:
+        print(f"[main] get_chat_messages for summary error: {exc}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No se pudo obtener los mensajes del chat.",
+        )
+
+    if not messages:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Chat no encontrado o sin mensajes.",
+        )
+
+    return agent_module.generate_summary(messages)
 
 
 @app.get(

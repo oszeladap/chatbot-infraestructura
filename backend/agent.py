@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 from datetime import datetime, timezone
@@ -223,3 +224,98 @@ def run_agent(message: str, history: list[dict[str, Any]]) -> dict[str, Any]:
             "tokens_used": 0,
             "used_search": False,
         }
+
+
+# ---------------------------------------------------------------------------
+# Structured summary for executive PDF
+# ---------------------------------------------------------------------------
+
+def _empty_summary() -> dict:
+    nd = "No disponible"
+    return {
+        "destino":  nd,
+        "clima":    {"descripcion": nd, "temperatura": nd, "recomendacion": nd},
+        "costos":   {
+            "transporte":   {"economico": nd, "comodo": nd},
+            "hospedaje":    {"economico": nd, "comodo": nd},
+            "alimentacion": {"economico": nd, "comodo": nd},
+            "tours":        {"economico": nd, "comodo": nd},
+        },
+        "lugares":  [],
+        "consejos": [],
+    }
+
+
+def generate_summary(messages: list[dict]) -> dict:
+    """Send conversation to Mistral and extract structured data for the executive PDF."""
+    try:
+        lines: list[str] = []
+        for m in messages:
+            role    = "Usuario" if m.get("role") == "user" else "Asistente"
+            content = (m.get("content") or "").strip()
+            if content:
+                lines.append(f"{role}: {content[:1500]}")
+
+        if not lines:
+            return _empty_summary()
+
+        conv_text = "\n\n".join(lines)
+
+        prompt = f"""Analiza esta conversacion de viajes en Peru y extrae la informacion clave.
+
+CONVERSACION:
+{conv_text}
+
+Responde UNICAMENTE con un JSON valido. Estructura exacta:
+{{
+  "destino": "ciudad o destino principal (solo el nombre, ej: Cusco)",
+  "clima": {{
+    "descripcion": "descripcion breve del clima en 1 oracion",
+    "temperatura": "rango de temperatura con unidades (ej: 8-22 C)",
+    "recomendacion": "que ropa llevar o mejor epoca para visitar"
+  }},
+  "costos": {{
+    "transporte":   {{"economico": "precio y operador mas economico", "comodo": "precio y operador premium"}},
+    "hospedaje":    {{"economico": "precio hostal o basico por noche", "comodo": "precio hotel comodo por noche"}},
+    "alimentacion": {{"economico": "precio menu basico del dia", "comodo": "precio restaurante comodo"}},
+    "tours":        {{"economico": "tour o entrada mas economica", "comodo": "tour completo o con guia"}}
+  }},
+  "lugares":  ["Lugar 1", "Lugar 2", "Lugar 3", "Lugar 4", "Lugar 5"],
+  "consejos": ["Consejo practico 1", "Consejo practico 2", "Consejo practico 3"]
+}}
+
+Reglas:
+- Usa SOLO informacion de la conversacion; no inventes datos
+- Si un campo no tiene informacion, usa "No disponible"
+- Lugares: maximo 7, los mas relevantes; Consejos: maximo 5, los mas accionables
+- Costos: incluye rangos concretos en soles (S/.) si se mencionaron
+- NO incluyas markdown ni texto fuera del JSON"""
+
+        llm_sum = ChatMistralAI(
+            model="mistral-large-latest",
+            temperature=0.1,
+            api_key=os.environ["MISTRAL_API_KEY"],
+        )
+        response = llm_sum.invoke([HumanMessage(content=prompt)])
+        raw = response.content.strip()
+
+        # Strip markdown code fences if present
+        raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.MULTILINE)
+        raw = re.sub(r"\s*```\s*$", "", raw, flags=re.MULTILINE)
+        match = re.search(r"\{[\s\S]*\}", raw)
+        if match:
+            raw = match.group()
+
+        result = json.loads(raw)
+
+        # Ensure required keys exist (fill missing with empty_summary defaults)
+        base = _empty_summary()
+        for key in base:
+            if key not in result:
+                result[key] = base[key]
+
+        return result
+
+    except Exception as exc:
+        print(f"[agent] generate_summary error: {exc}")
+        return _empty_summary()
