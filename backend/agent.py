@@ -285,10 +285,13 @@ Responde UNICAMENTE con un JSON valido. Estructura exacta:
 }}
 
 Reglas:
-- Usa SOLO informacion de la conversacion; no inventes datos
-- Si un campo no tiene informacion, usa "No disponible"
-- Lugares: maximo 7, los mas relevantes; Consejos: maximo 5, los mas accionables
-- Costos: incluye rangos concretos en soles (S/.) si se mencionaron
+- Prioriza la informacion de la conversacion; si el destino es claro pero no se mencionaron datos de alguna categoria, usa tu conocimiento general sobre ese destino en Peru para proporcionar rangos tipicos en soles peruanos (S/.)
+- NUNCA dejes un campo en "No disponible" si conoces el destino — proporciona estimados generales tipicos
+- Solo usa "No disponible" si el destino no esta claro o realmente no tienes informacion de ninguna fuente
+- Lugares: maximo 7, los mas relevantes e imperdibles del destino
+- Consejos: maximo 5, los mas practicos y accionables para el turista
+- Costos: incluye rangos concretos en soles (S/.) con operadores especificos si los conoces
+- Clima: proporciona datos reales del destino para la epoca del ano actual
 - NO incluyas markdown ni texto fuera del JSON"""
 
         llm_sum = ChatMistralAI(

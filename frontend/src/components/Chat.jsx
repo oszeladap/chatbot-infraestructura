@@ -108,6 +108,125 @@ function parseBlocks(text) {
   return blocks
 }
 
+// ── Destination / origin helpers ──────────────────────────────────────────────
+const PERU_CITY_LIST = [
+  'machu picchu','puerto maldonado','tingo maria',
+  'cusco','lima','arequipa','trujillo','chiclayo','iquitos','piura',
+  'huancayo','puno','cajamarca','tacna','ica','ayacucho','huaraz',
+  'moquegua','tumbes','tarapoto','juliaca','chimbote','paracas',
+  'nazca','pucallpa','sullana','huanuco','abancay',
+]
+
+function extractDestCity(messages) {
+  const text = messages.map(m => m.content ?? '').join(' ').toLowerCase()
+  for (const city of PERU_CITY_LIST) {
+    if (text.includes(city)) return city.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
+  }
+  return ''
+}
+
+function safeName(s) {
+  return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')
+}
+
+// ── Wikimedia image fetcher ────────────────────────────────────────────────────
+const DEST_WIKI = {
+  'cusco':            ['Cusco', 'Machu Picchu', 'Sacsayhuaman'],
+  'machu picchu':     ['Machu Picchu', 'Inca Trail Peru'],
+  'lima':             ['Lima Peru', 'Miraflores District Lima', 'Barranco Lima'],
+  'arequipa':         ['Arequipa', 'Colca Canyon', 'Monastery of Santa Catalina Arequipa'],
+  'puno':             ['Puno Peru', 'Lake Titicaca', 'Uros Floating Islands'],
+  'trujillo':         ['Trujillo Peru', 'Chan Chan', 'Huaca del Sol Luna'],
+  'iquitos':          ['Iquitos', 'Amazon rainforest Peru'],
+  'huaraz':           ['Huaraz', 'Huascaran National Park'],
+  'paracas':          ['Paracas National Reserve', 'Ballestas Islands'],
+  'nazca':            ['Nazca Lines', 'Nazca Peru'],
+  'chiclayo':         ['Chiclayo', 'Huaca Rajada', 'Royal Tombs of Sipan'],
+  'ayacucho':         ['Ayacucho Peru', 'Temple of Huari'],
+  'tarapoto':         ['Tarapoto', 'Laguna Azul Peru'],
+  'cajamarca':        ['Cajamarca Peru', 'Cumbe Mayo'],
+  'tacna':            ['Tacna Peru'],
+  'piura':            ['Piura Peru', 'Mancora'],
+}
+
+async function fetchWikiImage(pageTitle) {
+  try {
+    const url = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(pageTitle)}&prop=pageimages&format=json&pithumbsize=320&origin=*`
+    const data = await fetch(url).then(r => r.json())
+    const page = Object.values(data?.query?.pages ?? {})[0]
+    const src = page?.thumbnail?.source
+    if (!src) return null
+    const blob = await fetch(src).then(r => r.blob())
+    return await new Promise(resolve => {
+      const rd = new FileReader()
+      rd.onload  = () => resolve(rd.result)
+      rd.onerror = () => resolve(null)
+      rd.readAsDataURL(blob)
+    })
+  } catch { return null }
+}
+
+async function fetchDestImages(destCity, limit = 2) {
+  if (!destCity) return []
+  const key = destCity.toLowerCase()
+  const pages = (DEST_WIKI[key] ?? [`${destCity} Peru`]).slice(0, limit)
+  const results = await Promise.all(pages.map(async p => {
+    const b64 = await fetchWikiImage(p)
+    return b64 ? { title: p, b64 } : null
+  }))
+  return results.filter(Boolean)
+}
+
+// ── OSRM route helper ─────────────────────────────────────────────────────────
+const MANEUVER_ES = {
+  depart: 'Partir desde', arrive: 'Llegar al destino',
+  turn: { left: 'Girar a la izquierda', right: 'Girar a la derecha',
+          'slight left': 'Girar levemente a la izquierda', 'slight right': 'Girar levemente a la derecha',
+          'sharp left': 'Giro brusco a la izquierda', 'sharp right': 'Giro brusco a la derecha',
+          uturn: 'Dar la vuelta' },
+  continue: 'Continuar recto por', 'new name': 'Continuar por',
+  merge: 'Incorporarse a', roundabout: 'Tomar la rotonda', 'exit roundabout': 'Salir de la rotonda',
+}
+
+async function fetchRoute(fromQ, toQ) {
+  try {
+    const nom = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=pe&q='
+    const [r1, r2] = await Promise.all([
+      fetch(nom + encodeURIComponent(fromQ)).then(r => r.json()),
+      fetch(nom + encodeURIComponent(toQ)).then(r => r.json()),
+    ])
+    if (!r1?.[0] || !r2?.[0]) return null
+    const { lon: lon1, lat: lat1 } = r1[0]
+    const { lon: lon2, lat: lat2 } = r2[0]
+    const osrm = `https://router.project-osrm.org/route/v1/foot/${lon1},${lat1};${lon2},${lat2}?steps=true&overview=false`
+    const rData = await fetch(osrm).then(r => r.json())
+    if (rData.code !== 'Ok') return null
+    const route = rData.routes[0]
+    const steps = route.legs[0].steps.slice(0, 10)
+    return {
+      distance: Math.round(route.distance),
+      duration: Math.round(route.duration / 60),
+      steps: steps.map(s => {
+        const { type, modifier } = s.maneuver
+        let instr = MANEUVER_ES[type] ?? 'Continuar'
+        if (typeof instr === 'object') instr = instr[modifier] ?? 'Continuar'
+        const name = s.name && s.name !== '' ? ` ${s.name}` : ''
+        if (!['depart','arrive'].includes(type) && name) instr += name
+        return { instr, dist: Math.round(s.distance) }
+      }),
+    }
+  } catch { return null }
+}
+
+const TOP_ATTRACTION = {
+  'cusco': 'Machu Picchu Cusco', 'lima': 'Larco Museum Lima', 'arequipa': 'Santa Catalina Monastery Arequipa',
+  'puno': 'Lake Titicaca Puno', 'trujillo': 'Chan Chan Trujillo', 'huaraz': 'Huascaran Huaraz',
+  'iquitos': 'Amazon River Iquitos', 'paracas': 'Ballestas Islands Paracas',
+  'nazca': 'Nazca Lines Nazca', 'chiclayo': 'Huaca Rajada Chiclayo',
+  'ayacucho': 'Wari Ruins Ayacucho', 'tarapoto': 'Laguna Azul Tarapoto',
+  'cajamarca': 'Cumbe Mayo Cajamarca', 'machu picchu': 'Machu Picchu',
+}
+
 function renderBlocks(doc, blocks, x, y, w, secHc, secRc, pageH, M) {
   const LH = 11.5
 
@@ -187,7 +306,7 @@ function renderBlocks(doc, blocks, x, y, w, secHc, secRc, pageH, M) {
 }
 
 // ── PDF export ────────────────────────────────────────────────────────────────
-async function exportPDF(messages, userEmail) {
+async function exportPDF(messages, userEmail, userCity = '') {
   const { jsPDF } = await import('jspdf')
   const doc   = new jsPDF({ unit: 'pt', format: 'a4' })
   const pageW = doc.internal.pageSize.getWidth()
@@ -199,6 +318,17 @@ async function exportPDF(messages, userEmail) {
     if (y + needed > pageH - 40) { doc.addPage(); return M }
     return y
   }
+
+  // ── Filename con origen y destino ─────────────────────────────────────────
+  const destCity = extractDestCity(messages)
+  const originCity = userCity || 'Peru'
+  const dateTag = new Date().toISOString().slice(0, 10)
+  const pdfFilename = destCity
+    ? `Detalle_viaje_${safeName(originCity)}_${safeName(destCity)}_${dateTag}.pdf`
+    : `Detalle_viaje_Peru_${dateTag}.pdf`
+
+  // ── Pre-fetch images for LUGARES section ─────────────────────────────────
+  const destImages = await fetchDestImages(destCity, 2)
 
   // ── PORTADA ──────────────────────────────────────────────────────────────
   // Azul suave — cabecera principal
@@ -341,7 +471,91 @@ async function exportPDF(messages, userEmail) {
       doc.line(M, y + 4, M + CW, y + 4)
       y += 14
     }
+
+    // ── Fotos de destino (solo en LUGARES) ──────────────────────────────────
+    if (sec.title.includes('LUGARES') && destImages.length > 0) {
+      const imgW = Math.floor((CW - 8) / destImages.length)
+      const imgH = Math.round(imgW * 0.625) // 16:10 ratio
+      if (y + imgH + 28 > pageH - M) { doc.addPage(); y = M }
+      doc.setFillColor(245, 243, 255)
+      doc.rect(M, y, CW, imgH + 24, 'F')
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5)
+      doc.setTextColor(109, 40, 217)
+      doc.text('GALERIA DEL DESTINO', M + 6, y + 12)
+      y += 18
+      for (let di = 0; di < destImages.length; di++) {
+        try {
+          const fmt = destImages[di].b64.includes('image/png') ? 'PNG' : 'JPEG'
+          doc.addImage(destImages[di].b64, fmt, M + di * (imgW + 4), y, imgW, imgH)
+          doc.setFont('helvetica', 'italic'); doc.setFontSize(6.5); doc.setTextColor(100, 80, 150)
+          const cap = normalizePDF(destImages[di].title)
+          doc.text(cap, M + di * (imgW + 4) + 2, y + imgH + 7)
+        } catch {}
+      }
+      y += imgH + 18
+    }
+
     y += 18
+  }
+
+  // ── Ruta al lugar más importante ──────────────────────────────────────────
+  if (destCity) {
+    const destKey = destCity.toLowerCase()
+    const topAttr = TOP_ATTRACTION[destKey]
+    if (topAttr) {
+      const fromQ = `Plaza de Armas ${destCity} Peru`
+      const routeData = await fetchRoute(fromQ, topAttr + ' Peru')
+      if (y + 80 > pageH - M) { doc.addPage(); y = M }
+      doc.setFillColor(15, 35, 80)
+      doc.rect(M, y, CW, 24, 'F')
+      doc.setTextColor(232, 184, 75)
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
+      const topName = normalizePDF(topAttr.replace(/ Peru$/, '').replace(/ Cusco$/, '').replace(new RegExp(` ${destCity}$`, 'i'), ''))
+      doc.text(`COMO LLEGAR: Plaza de Armas => ${topName}`, M + 8, y + 16)
+      y += 24
+
+      if (routeData) {
+        doc.setFillColor(248, 250, 252)
+        const stepsContent = routeData.steps.filter(s => s.dist > 0 || ['depart','arrive'].some(t => s.instr.includes(MANEUVER_ES[t])))
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5)
+        const distText = `Distancia total: ${routeData.distance}m  |  Tiempo caminando: ~${routeData.duration} min`
+        const distH = 20
+        if (y + distH > pageH - M) { doc.addPage(); y = M }
+        doc.setFillColor(235, 244, 255)
+        doc.rect(M, y, CW, distH, 'F')
+        doc.setTextColor(21, 101, 160); doc.setFont('helvetica', 'bold'); doc.setFontSize(8)
+        doc.text(distText, M + 8, y + 13)
+        y += distH + 4
+
+        let stepNum = 1
+        for (const step of stepsContent.slice(0, 8)) {
+          const stepTxt = `${stepNum}. ${normalizePDF(step.instr)}${step.dist > 0 ? ' (' + step.dist + 'm)' : ''}`
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5)
+          const lines = doc.splitTextToSize(stepTxt, CW - 16)
+          const sH = lines.length * 10 + 6
+          if (y + sH > pageH - M) { doc.addPage(); y = M }
+          doc.setFillColor(stepNum % 2 === 0 ? 248 : 255, stepNum % 2 === 0 ? 250 : 255, stepNum % 2 === 0 ? 252 : 255)
+          doc.rect(M, y, CW, sH, 'F')
+          doc.setTextColor(25, 35, 65)
+          doc.text(lines, M + 8, y + 10)
+          y += sH
+          stepNum++
+        }
+        y += 8
+      } else {
+        // Fallback: Google Maps link
+        const gmUrl = `https://maps.google.com/?q=${encodeURIComponent(topAttr + ' ' + destCity + ' Peru')}&saddr=${encodeURIComponent('Plaza de Armas ' + destCity + ' Peru')}`
+        if (y + 30 > pageH - M) { doc.addPage(); y = M }
+        doc.setFillColor(235, 244, 255)
+        doc.rect(M, y, CW, 28, 'F')
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(21, 101, 160)
+        doc.text('Ver ruta en Google Maps:', M + 8, y + 12)
+        doc.setFontSize(7)
+        const urlLines = doc.splitTextToSize(gmUrl, CW - 16)
+        doc.text(urlLines, M + 8, y + 22)
+        y += 32
+      }
+    }
   }
 
   // ── PIE DE PÁGINA ─────────────────────────────────────────────────────────
@@ -357,26 +571,34 @@ async function exportPDF(messages, userEmail) {
     doc.text(`Pag. ${p} / ${total}`, pageW - M - 28, pageH - 7)
   }
 
-  doc.save(`recomendaciones-viaje-peru-${now.toISOString().slice(0, 10)}.pdf`)
+  doc.save(pdfFilename)
 }
 
 // ── PDF Resumen Ejecutivo — Estructurado con IA ───────────────────────────────
-// Calls the /summary backend endpoint (Mistral extraction) then builds a
-// scannable 1-page PDF with three visual sections: clima | lugares | costos table.
-async function exportPDFSummary(messages, userEmail, chatId, apiFetch) {
+async function exportPDFSummary(messages, userEmail, chatId, apiFetch, cachedSummary = null, userCity = '') {
   const { jsPDF } = await import('jspdf')
 
-  // 1. Fetch AI-structured summary from backend
-  let s = null
-  try {
-    const res = await apiFetch('/summary', {
-      method: 'POST',
-      body: JSON.stringify({ chat_id: chatId }),
-    })
-    if (res.ok) s = await res.json()
-  } catch (e) {
-    console.warn('[exportPDFSummary]', e.message)
+  // 1. Usar caché si disponible, si no llamar al backend
+  let s = cachedSummary
+  if (!s) {
+    try {
+      const res = await apiFetch('/summary', {
+        method: 'POST',
+        body: JSON.stringify({ chat_id: chatId }),
+      })
+      if (res.ok) s = await res.json()
+    } catch (e) {
+      console.warn('[exportPDFSummary]', e.message)
+    }
   }
+
+  // ── Filename con origen y destino ─────────────────────────────────────────
+  const destCity = extractDestCity(messages)
+  const originCity = userCity || 'Peru'
+  const dateTag = new Date().toISOString().slice(0, 10)
+  const sumFilename = destCity
+    ? `Resumen_viaje_${safeName(originCity)}_${safeName(destCity)}_${dateTag}.pdf`
+    : `Resumen_viaje_Peru_${dateTag}.pdf`
 
   const nd = 'No disponible'
   const safe = v =>
@@ -594,7 +816,7 @@ async function exportPDFSummary(messages, userEmail, chatId, apiFetch) {
     doc.text(`Pag. ${p} / ${total}`, PW - M - 28, PH - 5)
   }
 
-  doc.save(`resumen-ejecutivo-peru-${now.toISOString().slice(0, 10)}.pdf`)
+  doc.save(sumFilename)
 }
 
 // ── IntiSun logo ──────────────────────────────────────────────────────────────
@@ -635,10 +857,13 @@ export default function Chat() {
   // True when displaying a read-only historical chat
   const [isHistoryView,  setIsHistoryView]  = useState(false)
 
-  const [input,       setInput]       = useState('')
-  const [typing,      setTyping]      = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768)
-  const [activeTab,   setActiveTab]   = useState('chat')
+  const [input,        setInput]        = useState('')
+  const [typing,       setTyping]       = useState(false)
+  const [sidebarOpen,  setSidebarOpen]  = useState(window.innerWidth > 768)
+  const [activeTab,    setActiveTab]    = useState('chat')
+  const [summaryCache, setSummaryCache] = useState(null)
+  const [userCity,     setUserCity]     = useState('')
+  const [showAbout,    setShowAbout]    = useState(false)
 
   const endRef   = useRef(null)
   const inputRef = useRef(null)
@@ -664,6 +889,21 @@ export default function Chat() {
 
   // Scroll to bottom whenever messages or typing change
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, typing])
+
+  // Geolocation → reverse geocode for PDF filename origin
+  useEffect(() => {
+    if (!navigator.geolocation) return
+    navigator.geolocation.getCurrentPosition(pos => {
+      const { latitude: lat, longitude: lon } = pos.coords
+      fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json&accept-language=es`)
+        .then(r => r.json())
+        .then(d => {
+          const city = d?.address?.city || d?.address?.town || d?.address?.county || d?.address?.state || ''
+          if (city) setUserCity(city)
+        })
+        .catch(() => {})
+    }, () => {})
+  }, [])
 
   // Collapse sidebar on mobile resize
   useEffect(() => {
@@ -694,7 +934,8 @@ export default function Chat() {
     setMessages([])
     setActiveChatId(null)
     setIsHistoryView(false)
-    fetchChatList()              // refresh sidebar to show last saved chat
+    setSummaryCache(null)
+    fetchChatList()
     if (window.innerWidth <= 768) setSidebarOpen(false)
   }, [fetchChatList])
 
@@ -727,6 +968,18 @@ export default function Chat() {
 
       const data = await res.json()
       setMessages(prev => [...prev, { role: 'assistant', content: data.reply, usedSearch: data.used_search }])
+
+      // Pre-generate summary in background so PDF export is instant
+      const bgChatId = chatId
+      setTimeout(async () => {
+        try {
+          const sumRes = await apiFetch('/summary', {
+            method: 'POST',
+            body: JSON.stringify({ chat_id: bgChatId }),
+          })
+          if (sumRes.ok) setSummaryCache(await sumRes.json())
+        } catch {}
+      }, 800)
 
       // Update sidebar list: if this chat is new, add it at the top
       setChatList(prev => {
@@ -844,7 +1097,7 @@ export default function Chat() {
             {/* PDF buttons — only when there are messages */}
             {activeTab === 'chat' && messages.length > 0 && (
               <>
-                <button className="btn-header" onClick={() => exportPDF(messages, email)} title="Reporte detallado PDF">
+                <button className="btn-header" onClick={() => exportPDF(messages, email, userCity)} title="Reporte detallado PDF">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
                        stroke="currentColor" strokeWidth="2.2">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -854,7 +1107,9 @@ export default function Chat() {
                   </svg>
                   <span>PDF</span>
                 </button>
-                <button className="btn-header btn-header-gold" onClick={() => exportPDFSummary(messages, email, activeChatId || chatId, apiFetch)} title="Resumen ejecutivo PDF (max 2 hojas)">
+                <button className="btn-header btn-header-gold"
+                  onClick={() => exportPDFSummary(messages, email, activeChatId || chatId, apiFetch, summaryCache, userCity)}
+                  title="Resumen ejecutivo PDF (max 2 hojas)">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
                        stroke="currentColor" strokeWidth="2.2">
                     <rect x="3" y="3" width="18" height="18" rx="2"/>
@@ -862,7 +1117,7 @@ export default function Chat() {
                     <line x1="7" y1="12" x2="14" y2="12"/>
                     <line x1="7" y1="16" x2="11" y2="16"/>
                   </svg>
-                  <span>Resumen</span>
+                  <span>Resumen{summaryCache ? ' ✓' : ''}</span>
                 </button>
               </>
             )}
@@ -880,6 +1135,17 @@ export default function Chat() {
                 <span className="hide-xs">Limpiar</span>
               </button>
             )}
+
+            {/* Acerca de */}
+            <button className="btn-header btn-header-info" onClick={() => setShowAbout(true)} title="Acerca de">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="8.5"/>
+                <line x1="12" y1="11" x2="12" y2="16"/>
+              </svg>
+              <span className="hide-xs">Info</span>
+            </button>
 
             {/* Cerrar sesión */}
             <button className="btn-header" onClick={() => signOut(auth)} title="Cerrar sesión">
@@ -998,6 +1264,32 @@ export default function Chat() {
           </>
         )}
       </div>
+
+      {/* Modal Acerca de */}
+      {showAbout && (
+        <div className="about-overlay" onClick={() => setShowAbout(false)}>
+          <div className="about-modal" onClick={e => e.stopPropagation()}>
+            <button className="about-close" onClick={() => setShowAbout(false)}>×</button>
+            <div className="about-logo"><IntiSun size={42} /></div>
+            <h2 className="about-title">Sistema Inteligente de Viajes de Perú</h2>
+            <p className="about-desc">
+              Asistente conversacional que combina IA generativa con búsqueda web en tiempo real
+              para proporcionar recomendaciones personalizadas de vuelos, buses, hospedaje,
+              gastronomía y turismo en el Perú con exportación de reportes PDF.
+            </p>
+            <div className="about-tech">
+              <span>React 18</span><span>FastAPI</span><span>Mistral AI</span>
+              <span>Firebase Auth</span><span>Firestore</span><span>Tavily Search</span>
+              <span>Railway</span>
+            </div>
+            <div className="about-credits">
+              <span className="about-credits-label">Desarrollado por</span>
+              <strong className="about-credits-name">Oscar Zelada Pozo</strong>
+              <span className="about-version">v2.1 · 2026</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

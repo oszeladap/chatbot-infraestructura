@@ -33,21 +33,30 @@ Asistente conversacional especializado en viajes dentro del Perú. Permite a los
 #### Reporte Detallado (botón PDF)
 Documento completo con todas las conversaciones organizadas por tema:
 - **Portada** con fondo azul/dorado peruano, título del sistema, fecha, hora y usuario.
+- **Nombre de archivo inteligente**: `Detalle_viaje_<origen>_<destino>_<fecha>.pdf` (origen obtenido por geolocalización, destino detectado del chat).
 - **Secciones por tema** (solo aparecen si hay contenido relevante):
   1. ✈️ Costos de Viaje en Vuelo y Bus — Comparativas
   2. ☁️ Datos del Clima en Ciudad Destino
   3. 🏨 Costos de Hospedaje — Alternativas
   4. 🍽️ Costos de Alimentación y Transporte Local
-  5. 🗺️ Lugares que Visitar y sus Costos
+  5. 🗺️ Lugares que Visitar y sus Costos *(incluye galería fotográfica del destino vía Wikimedia)*
   6. ℹ️ Otros Datos de Interés para el Turista
+- **Galería fotográfica**: 2 fotos del destino principal obtenidas automáticamente de Wikimedia Commons.
+- **Sección de ruta**: instrucciones paso a paso desde la Plaza de Armas hasta la atracción principal, usando Nominatim + OSRM (transporte peatonal).
 - Cada Q/A aparece en **una sola sección** (primera coincidencia gana).
 - **Pie de página** en cada hoja con número de página y nombre del sistema.
 
-#### Resumen Ejecutivo (botón Resumen)
-Documento condensado de **máximo 2 páginas** con la información más importante:
-- Encabezado compacto con fecha y usuario.
-- Prioriza: condiciones climáticas, comparativa de costos económico vs. cómodo en transporte y hospedaje, lugares destacados y consejos clave.
-- Fuente y márgenes reducidos para máxima densidad de información.
+#### Resumen Ejecutivo (botón Resumen ✓)
+Documento condensado de **máximo 2 páginas** generado por IA (Mistral AI) con la información más importante:
+- **Pre-generado automáticamente** tras cada respuesta del asistente — el botón muestra `✓` cuando el resumen está listo y la descarga es **instantánea**.
+- **Nombre de archivo inteligente**: `Resumen_viaje_<origen>_<destino>_<fecha>.pdf`.
+- Estructura visual escaneable en una sola vista:
+  - Franja de destino destacada.
+  - Columna izquierda: Condiciones climáticas (temperatura, descripción, recomendación de ropa).
+  - Columna derecha: Lugares sugeridos del destino.
+  - Tabla de costos completa: Transporte, Hospedaje, Alimentación y Tours (opción económica vs. cómoda en S/.).
+  - Sección de Recomendaciones y Consejos clave.
+- La IA usa conocimiento general del destino para completar secciones cuando la conversación no las cubre explícitamente.
 - Ideal para imprimir y llevar de referencia rápida al viaje.
 
 ### Gestión y administración
@@ -55,7 +64,10 @@ Documento condensado de **máximo 2 páginas** con la información más importan
 - **Auto-guardado** — cada mensaje se persiste automáticamente; al crear nuevo chat el anterior queda guardado en el sidebar.
 - **Control de acceso por roles** — `assistant_user`, `viewer` y `admin` con distintos niveles de acceso.
 - **Panel de administración** — los usuarios con rol `admin` acceden a una pestaña para listar todos los usuarios, asignar/cambiar roles y eliminar cuentas.
-- **Perfil de usuario** — nombre, preferencias de viaje, notas y fecha del último ingreso.
+- **Perfil de usuario** — nombre completo (capturado en el registro), preferencias de viaje, notas y fecha del último ingreso.
+- **Registro con nombre** — en el formulario de creación de cuenta se solicita nombre completo; se persiste en Firebase Auth (`displayName`) y en Firestore.
+- **Modal Acerca de** — botón ℹ en la cabecera muestra créditos del desarrollador, tecnologías usadas y descripción breve del sistema.
+- **Geolocalización** — el navegador solicita permiso de ubicación para determinar la ciudad de origen del usuario y usarla en el nombre del archivo PDF.
 
 ---
 

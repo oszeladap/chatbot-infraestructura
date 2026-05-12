@@ -4,6 +4,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithPopup,
   GoogleAuthProvider,
+  updateProfile,
 } from 'firebase/auth'
 import { auth } from '../firebase'
 import './Login.css'
@@ -70,6 +71,7 @@ function IntiSun({ size = 56 }) {
 export default function Login() {
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
+  const [nombre,   setNombre]   = useState('')
   const [error,    setError]    = useState('')
   const [loading,  setLoading]  = useState(false)
   const [mode,     setMode]     = useState('login')
@@ -77,10 +79,17 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
+    if (mode === 'register' && !nombre.trim()) {
+      setError('Por favor ingresa tu nombre completo.')
+      return
+    }
     setLoading(true)
     try {
       if (mode === 'register') {
-        await createUserWithEmailAndPassword(auth, email, password)
+        const cred = await createUserWithEmailAndPassword(auth, email, password)
+        if (nombre.trim()) {
+          await updateProfile(cred.user, { displayName: nombre.trim() })
+        }
       } else {
         await signInWithEmailAndPassword(auth, email, password)
       }
@@ -136,6 +145,15 @@ export default function Login() {
         <div className="divider"><span>o</span></div>
 
         <form onSubmit={handleSubmit}>
+          {mode === 'register' && (
+            <>
+              <label className="field-label" htmlFor="l-nombre">Nombre completo</label>
+              <input id="l-nombre" className="field-input" type="text" value={nombre}
+                onChange={e => setNombre(e.target.value)} placeholder="Tu nombre completo"
+                required maxLength={100} autoComplete="name"/>
+            </>
+          )}
+
           <label className="field-label" htmlFor="l-email">Correo electrónico</label>
           <input id="l-email" className="field-input" type="email" value={email}
             onChange={e => setEmail(e.target.value)} placeholder="tu@correo.com"
@@ -155,7 +173,7 @@ export default function Login() {
         </form>
 
         <button className="link-toggle"
-          onClick={() => { setMode(m => m === 'login' ? 'register' : 'login'); setError('') }}>
+          onClick={() => { setMode(m => m === 'login' ? 'register' : 'login'); setError(''); setNombre('') }}>
           {mode === 'login' ? '¿No tienes cuenta? Regístrate' : '¿Ya tienes cuenta? Ingresar'}
         </button>
 

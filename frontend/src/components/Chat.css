@@ -547,3 +547,82 @@
     justify-content: center;
   }
 }
+
+/* ══════════════════════════════════════════════
+   BOTÓN INFO
+══════════════════════════════════════════════ */
+.btn-header-info {
+  background: rgba(99, 102, 241, .18);
+  border-color: rgba(99, 102, 241, .4);
+  color: #a5b4fc;
+}
+.btn-header-info:hover { background: rgba(99, 102, 241, .32); }
+
+/* ══════════════════════════════════════════════
+   MODAL ACERCA DE
+══════════════════════════════════════════════ */
+.about-overlay {
+  position: fixed; inset: 0; z-index: 900;
+  background: rgba(0, 0, 0, .6);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  animation: fadeIn .18s ease;
+}
+
+@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+
+.about-modal {
+  background: #0F172A;
+  border: 1px solid rgba(232, 184, 75, .35);
+  border-radius: 16px;
+  padding: 32px 28px 28px;
+  max-width: 420px; width: 100%;
+  position: relative;
+  box-shadow: 0 24px 64px rgba(0,0,0,.6);
+  text-align: center;
+  animation: slideUp .22s ease;
+}
+
+@keyframes slideUp { from { transform: translateY(24px); opacity: 0 } to { transform: none; opacity: 1 } }
+
+.about-close {
+  position: absolute; top: 12px; right: 14px;
+  background: none; border: none; color: #94A3B8;
+  font-size: 1.4rem; cursor: pointer; line-height: 1;
+  padding: 4px 8px; border-radius: 6px;
+  transition: color .15s, background .15s;
+}
+.about-close:hover { color: #fff; background: rgba(255,255,255,.08); }
+
+.about-logo { margin-bottom: 14px; }
+
+.about-title {
+  font-size: 1.05rem; font-weight: 800; color: #E8B84B;
+  margin: 0 0 12px; line-height: 1.35;
+}
+
+.about-desc {
+  font-size: .84rem; color: #94A3B8; line-height: 1.65;
+  margin: 0 0 18px;
+}
+
+.about-tech {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  justify-content: center; margin-bottom: 22px;
+}
+.about-tech span {
+  background: rgba(21, 101, 160, .25);
+  border: 1px solid rgba(21, 101, 160, .4);
+  color: #7DD3FC; border-radius: 999px;
+  padding: 3px 11px; font-size: .73rem; font-weight: 600;
+}
+
+.about-credits {
+  background: rgba(232, 184, 75, .08);
+  border: 1px solid rgba(232, 184, 75, .2);
+  border-radius: 10px; padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 4px; align-items: center;
+}
+.about-credits-label { font-size: .72rem; color: #64748B; text-transform: uppercase; letter-spacing: .06em; }
+.about-credits-name  { font-size: 1rem; font-weight: 800; color: #E8B84B; }
+.about-version       { font-size: .72rem; color: #64748B; }
