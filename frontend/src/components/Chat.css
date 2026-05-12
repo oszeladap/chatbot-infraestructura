@@ -341,17 +341,16 @@
 }
 
 /* ══════════════════════════════════════════════
-   DESTINATION IMAGE GALLERY (chat bubbles)
+   DESTINATION IMAGE GALLERY (chat bubbles) — 2×2 grid, min 4 images
 ══════════════════════════════════════════════ */
 .bubble-img-gallery {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 10px;
   max-width: 100%;
-  flex-wrap: nowrap;
 }
 .bubble-img-item {
-  flex: 1 1 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -367,7 +366,7 @@
   display: block;
 }
 .bubble-img-cap {
-  font-size: .65rem;
+  font-size: .62rem;
   color: #94A3B8;
   text-align: center;
   line-height: 1.3;

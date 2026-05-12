@@ -174,9 +174,9 @@ export default function MessageBubble({ role, content, usedSearch = false, isErr
     ? { background: section.bg, borderColor: section.color }
     : {}
 
-  // Build image list: plaza first, then top, then extras (max 3)
+  // Build image list: plaza first, then top, then extras (max 4)
   const imgList = images
-    ? [images.plaza, images.top, ...(images.extras ?? [])].filter(Boolean).slice(0, 3)
+    ? [images.plaza, images.top, ...(images.extras ?? [])].filter(Boolean).slice(0, 4)
     : []
 
   return (

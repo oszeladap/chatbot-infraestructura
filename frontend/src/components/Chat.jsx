@@ -198,19 +198,22 @@ const TOP_ATTRACTION = {
 }
 
 async function fetchRoute(fromQ, toQ) {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 9000)
   try {
     const nom = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=pe&q='
+    const sig = { signal: ctrl.signal }
     const [r1, r2] = await Promise.all([
-      fetch(nom + encodeURIComponent(fromQ)).then(r => r.json()),
-      fetch(nom + encodeURIComponent(toQ)).then(r => r.json()),
+      fetch(nom + encodeURIComponent(fromQ), sig).then(r => r.json()),
+      fetch(nom + encodeURIComponent(toQ),   sig).then(r => r.json()),
     ])
     if (!r1?.[0] || !r2?.[0]) return null
     const { lon: lon1, lat: lat1 } = r1[0]
     const { lon: lon2, lat: lat2 } = r2[0]
     // Fetch both walking and driving routes simultaneously
     const [footData, driveData] = await Promise.all([
-      fetch(`https://router.project-osrm.org/route/v1/foot/${lon1},${lat1};${lon2},${lat2}?steps=true&overview=false`).then(r => r.json()),
-      fetch(`https://router.project-osrm.org/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?steps=false&overview=false`).then(r => r.json()),
+      fetch(`https://router.project-osrm.org/route/v1/foot/${lon1},${lat1};${lon2},${lat2}?steps=true&overview=false`,    sig).then(r => r.json()),
+      fetch(`https://router.project-osrm.org/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?steps=false&overview=false`, sig).then(r => r.json()),
     ])
     const parseSteps = (data) => {
       if (data.code !== 'Ok') return null
@@ -231,6 +234,7 @@ async function fetchRoute(fromQ, toQ) {
     }
     return { walk: parseSteps(footData), drive: parseSteps(driveData) }
   } catch { return null }
+  finally { clearTimeout(timer) }
 }
 
 // ── jsPDF route map diagram ───────────────────────────────────────────────────
@@ -962,6 +966,7 @@ export default function Chat() {
   const [summaryCache, setSummaryCache] = useState(null)
   const [userCity,     setUserCity]     = useState('')
   const [showAbout,    setShowAbout]    = useState(false)
+  const [pdfLoading,   setPdfLoading]   = useState(false)
 
   const endRef   = useRef(null)
   const inputRef = useRef(null)
@@ -1037,6 +1042,33 @@ export default function Chat() {
     if (window.innerWidth <= 768) setSidebarOpen(false)
   }, [fetchChatList])
 
+  // ── PDF export handlers (with loading state + error feedback) ────────────
+  const handleExportPDF = async () => {
+    if (pdfLoading) return
+    setPdfLoading(true)
+    try {
+      await exportPDF(messages, email, userCity, apiFetch)
+    } catch (err) {
+      console.error('[PDF detallado]', err)
+      alert(`Error al generar PDF: ${err.message ?? err}`)
+    } finally {
+      setPdfLoading(false)
+    }
+  }
+
+  const handleExportSummary = async () => {
+    if (pdfLoading) return
+    setPdfLoading(true)
+    try {
+      await exportPDFSummary(messages, email, activeChatId || chatId, apiFetch, summaryCache, userCity)
+    } catch (err) {
+      console.error('[PDF resumen]', err)
+      alert(`Error al generar resumen: ${err.message ?? err}`)
+    } finally {
+      setPdfLoading(false)
+    }
+  }
+
   // ── Send message ──────────────────────────────────────────────────────────
   const sendMessage = async (e) => {
     e?.preventDefault()
@@ -1066,7 +1098,13 @@ export default function Chat() {
 
       const data = await res.json()
       const msgId = Date.now() + Math.random()
-      const msgDestCity = extractDestCity([{ content: data.reply }])
+      // Use full conversation context (user turn + new reply) to detect destination
+      const allMsgsForDetect = [
+        ...messages,
+        { role: 'user', content: text },
+        { role: 'assistant', content: data.reply },
+      ]
+      const msgDestCity = extractDestCity(allMsgsForDetect)
       setMessages(prev => [...prev, {
         id: msgId,
         role: 'assistant',
@@ -1215,7 +1253,9 @@ export default function Chat() {
             {/* PDF buttons — only when there are messages */}
             {activeTab === 'chat' && messages.length > 0 && (
               <>
-                <button className="btn-header" onClick={() => exportPDF(messages, email, userCity, apiFetch)} title="Reporte detallado PDF">
+                <button className="btn-header" onClick={handleExportPDF}
+                  disabled={pdfLoading}
+                  title="Reporte detallado PDF">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
                        stroke="currentColor" strokeWidth="2.2">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -1223,10 +1263,11 @@ export default function Chat() {
                     <line x1="12" y1="18" x2="12" y2="12"/>
                     <line x1="9"  y1="15" x2="15" y2="15"/>
                   </svg>
-                  <span>PDF</span>
+                  <span>{pdfLoading ? 'Generando…' : 'PDF'}</span>
                 </button>
                 <button className="btn-header btn-header-gold"
-                  onClick={() => exportPDFSummary(messages, email, activeChatId || chatId, apiFetch, summaryCache, userCity)}
+                  onClick={handleExportSummary}
+                  disabled={pdfLoading}
                   title="Resumen ejecutivo PDF (max 2 hojas)">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
                        stroke="currentColor" strokeWidth="2.2">
@@ -1235,7 +1276,7 @@ export default function Chat() {
                     <line x1="7" y1="12" x2="14" y2="12"/>
                     <line x1="7" y1="16" x2="11" y2="16"/>
                   </svg>
-                  <span>Resumen{summaryCache ? ' ✓' : ''}</span>
+                  <span>{pdfLoading ? 'Generando…' : `Resumen${summaryCache ? ' ✓' : ''}`}</span>
                 </button>
               </>
             )}
