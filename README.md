@@ -1,73 +1,89 @@
 # Sistema Inteligente de Viajes de Perú
 
-Asistente conversacional especializado en viajes dentro del Perú. Permite a los viajeros consultar en tiempo real vuelos, rutas de bus, hospedaje, gastronomía, atracciones turísticas y condiciones climáticas de cualquier ciudad peruana, combinando inteligencia artificial con búsqueda web actualizada y siempre referenciada a la fecha actual.
+Asistente conversacional especializado en viajes dentro del Perú. Permite a los viajeros consultar en tiempo real vuelos, rutas de bus, hospedaje, gastronomía, atracciones turísticas y condiciones climáticas de cualquier ciudad peruana, combinando inteligencia artificial con búsqueda web actualizada, galería fotográfica de destinos y reportes PDF enriquecidos.
 
-> Desarrollado con **React 18 + Vite** en el frontend y **FastAPI + Mistral AI + Tavily** en el backend, con autenticación segura mediante **Firebase Authentication** e historial de conversaciones en **Firestore**.
+> **Desarrollado por Oscar Zelada Pozo** · React 18 + Vite · FastAPI · Mistral AI · Tavily · Firebase · Firestore · Railway
 
 ---
 
 ## Funcionalidades
 
-### Asistente inteligente
+### Asistente inteligente con IA
 - **Consultas de transporte aéreo** — vuelos, aerolíneas (LATAM, Sky, Avianca, JetSmart, Star Perú), tarifas y conexiones.
 - **Consultas de transporte terrestre** — operadores (Cruz del Sur, Oltursa, Tepsa, Civa, Móvil Tours, Flores, Ittsa), rutas, horarios y terminales.
 - **Trenes y servicios turísticos** — Inca Rail, PeruRail, Andean Explorer, ruta a Machu Picchu.
 - **Hospedaje** — hoteles, hostales y alojamientos con rangos de precio y alternativas por ciudad.
 - **Gastronomía y transporte local** — restaurantes típicos, precios de menú, taxi, Uber y transporte urbano en destino.
 - **Atracciones turísticas** — museos, plazas, ruinas, miradores y tours con costos de entrada.
-- **Clima siempre presente** — cada respuesta con ciudad destino incluye automáticamente temperatura, precipitaciones y recomendaciones para la fecha de consulta o la fecha futura indicada.
+- **Clima siempre presente** — cada respuesta con ciudad destino incluye temperatura, precipitaciones y recomendaciones para la fecha de consulta o fecha futura indicada.
 - **Fecha de referencia automática** — el asistente considera siempre la fecha actual para temporadas, disponibilidad y precios vigentes.
+- **Búsqueda web en tiempo real** — Tavily recupera precios y condiciones actualizadas; el badge 🔍 indica cuándo se usó.
+
+### Galería fotográfica de destinos (NUEVO)
+- **Imágenes automáticas en el chat** — tras cada respuesta que mencione una ciudad peruana, el sistema muestra automáticamente **3 fotografías** del destino: Plaza de Armas, atracción principal y lugar adicional.
+- Las imágenes se obtienen mediante un **proxy backend** que consulta Wikimedia Commons sin restricciones CORS; el navegador nunca toca servicios externos de imágenes directamente.
+- **18 ciudades mapeadas**: Cusco, Lima, Arequipa, Puno, Trujillo, Iquitos, Huaraz, Paracas, Nazca, Chiclayo, Ayacucho, Cajamarca, Tarapoto, Tacna, Piura, Huancayo, Ica y Machu Picchu.
 
 ### Interfaz de usuario
 - **Historial de chats por sesión** — cada conversación se guarda en Firestore con ID basado en fecha/hora (`YYYYMMDD_HHmmss_mmm`). Se puede navegar entre chats anteriores desde el sidebar.
-- **Sidebar desplegable** — panel lateral con lista de conversaciones anteriores, vista previa del texto y contador de mensajes. Se abre/cierra con el botón hamburguesa.
+- **Sidebar desplegable** — panel lateral con lista de conversaciones anteriores, vista previa del texto y contador de mensajes.
 - **Renderizado markdown enriquecido** — tablas de precios con colores, negritas, listas, encabezados y bloques de código renderizados visualmente.
 - **Chips de categoría automáticos** — cada respuesta detecta su tema principal y muestra un chip con emoji e ícono de color: ✈️ Transporte, 🏨 Hospedaje, 🍽️ Alimentación, 🗺️ Turismo, ☁️ Clima.
-- **Burbujas de colores por tema** — el fondo de cada respuesta varía según la categoría detectada.
 - **Fuentes web clicables** — los enlaces `[Fuente: url]` se convierten en botones navegables.
-- **Búsqueda web en vivo** — Tavily obtiene información actualizada; el badge 🔍 indica cuándo se usó.
-- **Diseño responsive** — adaptado a escritorio, tablet y móvil. En pantallas pequeñas el sidebar se convierte en overlay con backdrop.
+- **Diseño responsive** — adaptado a escritorio, tablet y móvil con `100svh` para iOS Safari.
+- **Modal Acerca de** — botón ℹ en la cabecera muestra créditos del desarrollador, tecnologías usadas y descripción del sistema.
 
 ### Exportación PDF — dos modos
 
-#### Reporte Detallado (botón PDF)
+#### Reporte Detallado (botón **PDF**)
 Documento completo con todas las conversaciones organizadas por tema:
+
+- **Nombre de archivo inteligente**: `Detalle_viaje_<origen>_<destino>_<fecha>.pdf`
+  - Origen obtenido por **geolocalización** del navegador (Nominatim reverse geocoding).
+  - Destino detectado automáticamente de los mensajes del chat.
 - **Portada** con fondo azul/dorado peruano, título del sistema, fecha, hora y usuario.
-- **Nombre de archivo inteligente**: `Detalle_viaje_<origen>_<destino>_<fecha>.pdf` (origen obtenido por geolocalización, destino detectado del chat).
 - **Secciones por tema** (solo aparecen si hay contenido relevante):
   1. ✈️ Costos de Viaje en Vuelo y Bus — Comparativas
   2. ☁️ Datos del Clima en Ciudad Destino
   3. 🏨 Costos de Hospedaje — Alternativas
   4. 🍽️ Costos de Alimentación y Transporte Local
-  5. 🗺️ Lugares que Visitar y sus Costos *(incluye galería fotográfica del destino vía Wikimedia)*
+  5. 🗺️ Lugares que Visitar y sus Costos
   6. ℹ️ Otros Datos de Interés para el Turista
-- **Galería fotográfica**: 2 fotos del destino principal obtenidas automáticamente de Wikimedia Commons.
-- **Sección de ruta**: instrucciones paso a paso desde la Plaza de Armas hasta la atracción principal, usando Nominatim + OSRM (transporte peatonal).
-- Cada Q/A aparece en **una sola sección** (primera coincidencia gana).
+- **Galería fotográfica**: mínimo 3 fotos del destino (Plaza de Armas, atracción top y extra) obtenidas vía backend proxy de Wikimedia Commons.
+- **Sección de ruta — CÓMO LLEGAR**:
+  - **Diagrama visual tipo mapa**: fondo beige estilo OSM, cuadrícula de calles, arco parabólico azul del punto A al B, marcadores circulares con letras.
+  - **Barra de tiempos**: distancia y duración a pie y en vehículo calculadas con OSRM.
+  - **Pasos a pie**: instrucciones paso a paso junto al diagrama.
+  - **2 botones clickeables** que abren Google Maps:
+    - 🚶 Ruta a pie en Google Maps
+    - 🚗 Ruta en vehículo en Google Maps
+  - Ruta calculada desde la Plaza de Armas hasta la atracción principal del destino.
+- Cada Q/A aparece en **una sola sección** (primera coincidencia gana — sin duplicados).
 - **Pie de página** en cada hoja con número de página y nombre del sistema.
 
-#### Resumen Ejecutivo (botón Resumen ✓)
-Documento condensado de **máximo 2 páginas** generado por IA (Mistral AI) con la información más importante:
-- **Pre-generado automáticamente** tras cada respuesta del asistente — el botón muestra `✓` cuando el resumen está listo y la descarga es **instantánea**.
+#### Resumen Ejecutivo (botón **Resumen ✓**)
+Documento condensado de **máximo 2 páginas** generado por IA (Mistral AI):
+
+- **Pre-generado automáticamente** tras cada respuesta del asistente — el botón muestra `✓` cuando el resumen está listo en caché y la descarga es **instantánea** (sin espera).
 - **Nombre de archivo inteligente**: `Resumen_viaje_<origen>_<destino>_<fecha>.pdf`.
+- **2 imágenes obligatorias**: Plaza de Armas de la ciudad + principal atracción turística, siempre presentes.
 - Estructura visual escaneable en una sola vista:
-  - Franja de destino destacada.
-  - Columna izquierda: Condiciones climáticas (temperatura, descripción, recomendación de ropa).
-  - Columna derecha: Lugares sugeridos del destino.
-  - Tabla de costos completa: Transporte, Hospedaje, Alimentación y Tours (opción económica vs. cómoda en S/.).
-  - Sección de Recomendaciones y Consejos clave.
-- La IA usa conocimiento general del destino para completar secciones cuando la conversación no las cubre explícitamente.
-- Ideal para imprimir y llevar de referencia rápida al viaje.
+  - Franja de destino destacada (fondo azul oscuro, texto dorado).
+  - **Columna izquierda**: Condiciones climáticas — temperatura, descripción, recomendación de ropa.
+  - **Columna derecha**: Lugares sugeridos del destino.
+  - **Tabla de costos**: Transporte, Hospedaje, Alimentación y Tours — opción económica vs. cómoda en S/.
+  - **Sección de consejos**: recomendaciones prácticas para el viajero.
+- La IA (Mistral AI con `temperature=0.1`) completa automáticamente secciones con conocimiento general del destino cuando la conversación no las cubre explícitamente.
+- Ideal para imprimir y llevar de referencia rápida durante el viaje.
 
 ### Gestión y administración
-- **Historial persistente** — chats guardados en la subcollection Firestore `sessions/{uid}/chats/{chat_id}`, recuperados al iniciar.
+- **Historial persistente** — chats guardados en la subcollection Firestore `sessions/{uid}/chats/{chat_id}`.
 - **Auto-guardado** — cada mensaje se persiste automáticamente; al crear nuevo chat el anterior queda guardado en el sidebar.
 - **Control de acceso por roles** — `assistant_user`, `viewer` y `admin` con distintos niveles de acceso.
-- **Panel de administración** — los usuarios con rol `admin` acceden a una pestaña para listar todos los usuarios, asignar/cambiar roles y eliminar cuentas.
-- **Perfil de usuario** — nombre completo (capturado en el registro), preferencias de viaje, notas y fecha del último ingreso.
-- **Registro con nombre** — en el formulario de creación de cuenta se solicita nombre completo; se persiste en Firebase Auth (`displayName`) y en Firestore.
-- **Modal Acerca de** — botón ℹ en la cabecera muestra créditos del desarrollador, tecnologías usadas y descripción breve del sistema.
-- **Geolocalización** — el navegador solicita permiso de ubicación para determinar la ciudad de origen del usuario y usarla en el nombre del archivo PDF.
+- **Panel de administración** — los usuarios con rol `admin` acceden a la pestaña para listar todos los usuarios, asignar/cambiar roles y eliminar cuentas.
+- **Registro con nombre** — el formulario de creación de cuenta solicita nombre completo; se persiste en Firebase Auth (`displayName`) y en Firestore.
+- **Perfil de usuario** — nombre, preferencias de viaje, notas y fecha del último ingreso.
+- **Geolocalización** — el navegador solicita permiso de ubicación al iniciar para determinar la ciudad de origen y usarla en el nombre del archivo PDF.
 
 ---
 
@@ -99,7 +115,7 @@ Busca opciones de alojamiento en Miraflores, Lima, desde lo más económico hast
 ### Gastronomía y costos locales
 ```
 ¿Qué restaurantes económicos hay en Miraflores? ¿Cuánto sale el menú del día?
-¿Cuánto cuesta comer en un restaurante típico en Cusco? Dame opciones económicas y otras más cómodas.
+¿Cuánto cuesta comer en un restaurante típico en Cusco? Dame opciones económicas y más cómodas.
 ¿Cuánto cobran los taxis en Lima del aeropuerto al centro? ¿Y Uber?
 ```
 
@@ -137,15 +153,16 @@ cambio de moneda y seguridad.
 | Tecnología | Versión | Uso |
 |---|---|---|
 | **Python** | 3.12 | Lenguaje del servidor |
-| **FastAPI** | latest | Framework REST API |
-| **Uvicorn** | latest | Servidor ASGI |
-| **Mistral AI** (`mistral-large-latest`) | — | Modelo de lenguaje principal |
-| **LangChain + LangChain-Mistral** | — | Orquestación del agente conversacional |
-| **Tavily** | — | Búsqueda web en tiempo real |
-| **Firebase Admin SDK** | — | Verificación de tokens JWT y gestión de usuarios |
+| **FastAPI** | 0.115 | Framework REST API |
+| **Uvicorn** | 0.30 | Servidor ASGI |
+| **Mistral AI** (`mistral-large-latest`) | — | LLM principal + extracción estructurada para PDF resumen |
+| **LangChain + LangChain-Mistral** | 0.3 | Orquestación del agente conversacional |
+| **Tavily** | 0.3 | Búsqueda web en tiempo real |
+| **httpx** | 0.27 | Proxy server-side de imágenes Wikimedia (sin CORS) |
+| **Firebase Admin SDK** | 6.5 | Verificación de tokens JWT y gestión de usuarios |
 | **Firestore** | — | Base de datos NoSQL (historial y perfiles) |
-| **python-dotenv** | — | Gestión de variables de entorno |
-| **Pydantic v2** | — | Validación de esquemas de datos |
+| **python-dotenv** | 1.0 | Gestión de variables de entorno |
+| **Pydantic v2** | 2.8 | Validación de esquemas de datos |
 | **Starlette** | — | Middleware y StaticFiles para SPA |
 
 ### Frontend
@@ -153,9 +170,12 @@ cambio de moneda y seguridad.
 |---|---|---|
 | **React** | 18 | Librería de interfaz de usuario |
 | **Vite** | 5 | Bundler y servidor de desarrollo |
-| **Firebase JS SDK** | 10 | Autenticación en el cliente |
-| **jsPDF** | 2.5 | Generación de PDF en el navegador (2 modos) |
-| **CSS Variables** | — | Tema peruano (rojo, dorado, azul andino) |
+| **Firebase JS SDK** | 10 | Autenticación en el cliente (Google + Email/Password) |
+| **jsPDF** | 2.5 | Generación de PDF en el navegador (2 modos: Detallado y Resumen) |
+| **Nominatim (OpenStreetMap)** | — | Geocodificación inversa (ciudad del usuario) y búsqueda de coordenadas |
+| **OSRM** | — | Cálculo de rutas a pie y en vehículo (Open Source Routing Machine) |
+| **Wikimedia Commons API** | — | Imágenes de destinos turísticos (proxy via backend) |
+| **CSS Variables** | — | Tema turismo Perú (rojo, dorado, azul andino) |
 
 ### Infraestructura
 | Tecnología | Uso |
@@ -174,9 +194,10 @@ cambio de moneda y seguridad.
 chatbot-infraestructura/
 │
 ├── backend/                        # API REST (Python / FastAPI)
-│   ├── main.py                     # Entrypoint: rutas, middleware CORS, StaticFiles SPA
-│   ├── agent.py                    # Agente Mistral: prompt con fecha, clima obligatorio,
-│   │                               #   extracción de fechas, búsqueda Tavily
+│   ├── main.py                     # Entrypoint: rutas, CORS, StaticFiles SPA,
+│   │                               #   endpoint /images/{destination} (proxy Wikimedia)
+│   ├── agent.py                    # Agente Mistral: prompt, búsqueda Tavily,
+│   │                               #   generate_summary() para PDF resumen
 │   ├── auth.py                     # Verificación de tokens Firebase y control de roles
 │   ├── firestore_service.py        # CRUD: chats por sesión (subcollection) y perfiles
 │   ├── assign_role.py              # CLI para asignar roles directamente a usuarios Firebase
@@ -185,25 +206,30 @@ chatbot-infraestructura/
 │
 ├── frontend/                       # SPA React (Vite)
 │   ├── index.html                  # Entrada Vite
-│   ├── vite.config.js              # Config: proxy API en dev, optimizeDeps
+│   ├── vite.config.js              # Config: proxy API en dev (/chat, /images, /summary…)
 │   ├── package.json
 │   └── src/
 │       ├── main.jsx                # Punto de entrada React
 │       ├── App.jsx                 # Router: Login ↔ Chat (condicionado a auth)
-│       ├── firebase.js             # Configuración Firebase (projectId, apiKey, etc.)
+│       ├── firebase.js             # Configuración Firebase
 │       ├── index.css               # Variables CSS globales — paleta turismo Perú
 │       ├── context/
-│       │   └── AuthContext.jsx     # Estado global: firebaseUser, role, loading, getToken
+│       │   └── AuthContext.jsx     # Estado global: firebaseUser, role, loading
 │       ├── hooks/
 │       │   └── useApi.js           # Hook apiFetch: Bearer token + retry en 401/403
 │       └── components/
-│           ├── Login.jsx / .css    # Pantalla de acceso (correo + Google OAuth)
-│           ├── Chat.jsx  / .css    # Interfaz principal: chat, tabs, PDF export (2 modos), sidebar
+│           ├── Login.jsx / .css    # Pantalla de acceso: Google OAuth + Email/Password
+│           │                       #   (registro incluye campo Nombre completo)
+│           ├── Chat.jsx  / .css    # Interfaz principal: chat, galería de imágenes,
+│           │                       #   sidebar, PDF detallado y resumen ejecutivo,
+│           │                       #   geolocalización, modal Acerca de
 │           ├── Sidebar.jsx         # Panel lateral con historial de chats por fecha/hora
-│           ├── MessageBubble.jsx   # Burbuja con renderizador markdown completo +
-│           │                       #   detección de sección + chip temático
+│           ├── MessageBubble.jsx   # Burbuja con markdown, chips temáticos
+│           │                       #   y galería fotográfica del destino (3 imágenes)
 │           └── AdminPanel.jsx/.css # Panel de administración de usuarios y roles
 │
+├── CASO_DE_USO.md                  # Documentación UML 2.5 / IEEE 830 / RUP
+│                                   #   15 casos de uso, 27 RF, 29 RNF, 12 reglas de negocio
 ├── Dockerfile                      # Build multi-stage: Node (React) → Python (FastAPI)
 ├── railway.toml                    # Config Railway: builder Dockerfile, healthcheck /health
 ├── .dockerignore
@@ -215,14 +241,17 @@ chatbot-infraestructura/
 ```
 Firestore
 └── sessions/
-    └── {uid}/                      # Documento por usuario
-        ├── nombre, email, ...      # Perfil del usuario
-        └── chats/                  # Subcollección de chats
-            └── {YYYYMMDD_HHmmss_mmm}/   # Un documento por chat
-                ├── preview         # Primeras palabras del primer mensaje
-                ├── created_at      # Timestamp de creación
-                ├── message_count   # Total de mensajes en el chat
-                └── messages[]      # Array de {role, content, tokens, timestamp}
+    └── {uid}/                          # Documento por usuario
+        ├── cliente_id, nombre, email   # Perfil del usuario
+        ├── preferencias[]              # Lista de preferencias de viaje
+        ├── notas                       # Notas libres
+        ├── fecha_ultimo_ingreso        # Timestamp ISO
+        └── chats/                      # Subcollección de chats
+            └── {YYYYMMDD_HHmmss_mmm}/ # Un documento por conversación
+                ├── preview             # Primeras palabras del primer mensaje
+                ├── created_at          # Timestamp de creación
+                ├── message_count       # Total de mensajes en el chat
+                └── messages[]          # Array de {role, content, tokens, timestamp}
 ```
 
 ---
@@ -294,7 +323,7 @@ Abre `http://localhost:8000` en el navegador.
 > ```bash
 > cd frontend && npm run dev   # → http://localhost:5173
 > ```
-> El proxy de Vite redirige las llamadas API al backend en el puerto 8000.
+> El proxy de Vite redirige automáticamente `/chat`, `/chats`, `/images`, `/summary`, etc. al backend en el puerto 8000.
 
 ---
 
@@ -346,7 +375,7 @@ Cada `git push` a la rama `main` dispara automáticamente un nuevo despliegue en
 ## Gestión de roles
 
 ### Desde el Panel de Administración (recomendado)
-Los usuarios con rol `admin` tienen acceso a la pestaña **Administración** en la interfaz donde pueden:
+Los usuarios con rol `admin` tienen acceso a la pestaña **Administración** donde pueden:
 - Ver todos los usuarios registrados con su rol actual.
 - Asignar o cambiar roles (`assistant_user`, `viewer`, `admin`) mediante un desplegable.
 - Eliminar cuentas de usuario permanentemente.
@@ -375,11 +404,13 @@ python assign_role.py abc123uid assistant_user
 | Método | Ruta | Rol requerido | Descripción |
 |---|---|---|---|
 | `GET` | `/health` | Público | Estado del servidor |
-| `POST` | `/chat` | `assistant_user`, `admin` | Enviar mensaje al asistente |
+| `GET` | `/images/{destination}` | Público | Proxy de imágenes Wikimedia para destino peruano |
+| `POST` | `/chat` | `assistant_user`, `admin` | Enviar mensaje al asistente IA |
 | `GET` | `/chats` | `assistant_user`, `viewer`, `admin` | Listar todos los chats del usuario |
 | `GET` | `/chats/{chat_id}` | `assistant_user`, `viewer`, `admin` | Obtener mensajes de un chat específico |
 | `DELETE` | `/chats/{chat_id}` | `assistant_user`, `admin` | Eliminar un chat específico |
 | `DELETE` | `/chats` | `assistant_user`, `admin` | Eliminar todos los chats del usuario |
+| `POST` | `/summary` | `assistant_user`, `admin` | Generar resumen estructurado IA para PDF ejecutivo |
 | `GET` | `/history` | `assistant_user`, `viewer`, `admin` | Historial plano (legacy) |
 | `DELETE` | `/history` | `assistant_user`, `admin` | Limpiar historial (preserva perfil) |
 | `GET` | `/profile` | Todos los roles | Ver perfil propio |
@@ -390,6 +421,19 @@ python assign_role.py abc123uid assistant_user
 | `DELETE` | `/admin/users/{uid}` | `admin` | Eliminar usuario permanentemente |
 
 La documentación interactiva Swagger está disponible en `/docs`.
+
+---
+
+## Créditos
+
+| | |
+|---|---|
+| **Desarrollador** | Oscar Zelada Pozo |
+| **Versión** | 2.1 — Mayo 2026 |
+| **Stack principal** | React 18 · FastAPI · Mistral AI · Firebase · Firestore · Railway |
+| **Imágenes** | Wikimedia Commons (licencia libre) vía proxy backend |
+| **Mapas y rutas** | OpenStreetMap (Nominatim) + OSRM — datos © OpenStreetMap contributors |
+| **Documentación técnica** | `CASO_DE_USO.md` — estándar UML 2.5 / IEEE 830 / RUP |
 
 ---
 
