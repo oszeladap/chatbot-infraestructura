@@ -185,26 +185,31 @@ async function fetchBackendImages(destCity, apiFetch) {
   } catch { return { plaza: null, top: null, extras: [] } }
 }
 
-// Convert any image (including WebP) to JPEG via Canvas so jsPDF can embed it.
-// jsPDF only supports JPEG and PNG natively — Wikipedia often returns WebP.
+// Load any image (URL from Wikimedia CDN or base64 data) and convert to JPEG
+// via Canvas so jsPDF can embed it. Wikimedia images are crossOrigin-safe.
+// jsPDF only supports JPEG/PNG — this handles WebP and all other formats.
 async function prepareImgForPDF(imgObj) {
-  if (!imgObj?.data) return null
+  if (!imgObj) return null
+  const src = imgObj.url || imgObj.data   // url = Wikimedia CDN, data = legacy base64
+  if (!src) return null
   return new Promise((resolve) => {
     const img = new Image()
+    img.crossOrigin = 'anonymous'          // required so canvas stays untainted (Wikimedia allows CORS)
     img.onload = () => {
       try {
+        const W = Math.min(img.naturalWidth  || 640, 1280)
+        const H = Math.min(img.naturalHeight || 400,  900)
         const canvas = document.createElement('canvas')
-        canvas.width  = img.naturalWidth  || 640
-        canvas.height = img.naturalHeight || 400
+        canvas.width = W; canvas.height = H
         const ctx = canvas.getContext('2d')
         ctx.fillStyle = '#ffffff'
-        ctx.fillRect(0, 0, canvas.width, canvas.height)
-        ctx.drawImage(img, 0, 0)
+        ctx.fillRect(0, 0, W, H)
+        ctx.drawImage(img, 0, 0, W, H)
         resolve({ title: imgObj.title, data: canvas.toDataURL('image/jpeg', 0.88) })
       } catch { resolve(null) }
     }
     img.onerror = () => resolve(null)
-    img.src = imgObj.data
+    img.src = src
   })
 }
 
@@ -922,6 +927,63 @@ async function exportPDFSummary(messages, userEmail, chatId, apiFetch, cachedSum
     doc.setFont('helvetica', 'normal'); doc.setFontSize(FS); doc.setTextColor(30, 40, 70)
     for (const ll of tipBlocks) { doc.text(ll, M + 6, y); y += ll.length * LH + 3 }
     y += 4
+  }
+
+  // ── Mapa de ruta: Plaza de Armas → Atracción principal ───────────────────
+  if (destCity && apiFetch) {
+    try {
+      const routeRes = await apiFetch(`/route-map/${encodeURIComponent(destCity.toLowerCase())}`)
+      if (routeRes.ok) {
+        const rd = await routeRes.json()
+        const topName  = normalizePDF(rd.top_name ?? destCity)
+        const fromQ    = rd.from_label ?? `Plaza de Armas ${destCity} Peru`
+        const toQ      = rd.to_label   ?? topName
+        const distInfo = rd.dist_m > 0 ? `Distancia: ~${Math.round(rd.dist_m / 100) / 10} km` : ''
+        const durInfo  = rd.dur_min > 0 ? `  |  Tiempo aprox.: ~${rd.dur_min} min` : ''
+
+        const gmBase   = 'https://www.google.com/maps/dir/?api=1'
+        const gmFrom   = encodeURIComponent(fromQ)
+        const gmTo     = encodeURIComponent(toQ)
+        const walkUrl  = `${gmBase}&origin=${gmFrom}&destination=${gmTo}&travelmode=walking`
+        const driveUrl = `${gmBase}&origin=${gmFrom}&destination=${gmTo}&travelmode=driving`
+
+        const mapImgH = 160
+        br(mapImgH + 60)
+
+        // Section header
+        doc.setFillColor(15, 35, 80); doc.rect(M, y, CW, 20, 'F')
+        doc.setTextColor(232, 184, 75); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5)
+        doc.text(`RUTA: Plaza de Armas ${normalizePDF(destCity)} -> ${topName}`, M + 8, y + 14)
+        y += 20
+
+        // Distance bar
+        if (distInfo) {
+          doc.setFillColor(235, 244, 255); doc.rect(M, y, CW, 14, 'F')
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(21, 101, 160)
+          doc.text(`${distInfo}${durInfo}`, M + 6, y + 10)
+          y += 14
+        }
+
+        // OSM map image
+        try {
+          doc.addImage(rd.image, 'PNG', M, y, CW, mapImgH)
+        } catch {}
+        y += mapImgH + 6
+
+        // Google Maps buttons
+        const btnH = 20; const btnW = Math.floor((CW - 4) / 2)
+        br(btnH)
+        doc.setFillColor(21, 101, 160); doc.rect(M, y, btnW, btnH, 'F')
+        doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(7)
+        doc.text('Ver ruta a pie en Google Maps ->', M + 6, y + 13)
+        doc.link(M, y, btnW, btnH, { url: walkUrl })
+
+        doc.setFillColor(180, 83, 9); doc.rect(M + btnW + 4, y, btnW, btnH, 'F')
+        doc.text('Ver ruta en vehiculo en Google Maps ->', M + btnW + 10, y + 13)
+        doc.link(M + btnW + 4, y, btnW, btnH, { url: driveUrl })
+        y += btnH + 10
+      }
+    } catch {}
   }
 
   // ── Footer ────────────────────────────────────────────────────────────────

@@ -4,6 +4,7 @@ import asyncio
 import base64
 import io
 import os
+import re
 import tempfile
 import urllib.parse
 import uuid
@@ -144,32 +145,107 @@ class SummaryRequest(BaseModel):
 # Fetched server-side to avoid browser CORS issues.
 # ---------------------------------------------------------------------------
 
-_WIKI_REST  = "https://en.wikipedia.org/api/rest_v1/page/summary"
-_IMG_HEADERS = {"User-Agent": "TravelPeru/2.3 oszeladap@gmail.com"}
+_WIKI_REST   = "https://en.wikipedia.org/api/rest_v1/page/summary"
+_IMG_HEADERS = {"User-Agent": "TravelPeru/2.4 oszeladap@gmail.com"}
 
-# Maps each destination (lowercase) to Wikipedia article titles compatible with
-# the REST Summary API (which handles redirects, so common names work fine).
-# Rule: "plaza" = main city article (ALWAYS has a thumbnail), "top" = top attraction,
-# "extra" = additional well-known articles.
+# Maps each destination (lowercase) to Wikipedia article titles.
+# REST Summary API handles redirects, so common names are fine.
+# Order: plaza=city overview (guaranteed thumbnail), top=main attraction,
+# extra=[gastronomy dish, cultural site, tourist site, restaurant/hotel area].
+# Extras are tried in order; first 2 that have images fill the gallery slots 3-4.
 _DEST_IMG_MAP: dict[str, dict[str, Any]] = {
-    "cusco":        {"plaza": "Cusco",                       "top": "Machu Picchu",              "extra": ["Sacsayhuamán", "Qorikancha", "Pisac", "Ollantaytambo"]},
-    "machu picchu": {"plaza": "Aguas Calientes, Peru",       "top": "Machu Picchu",              "extra": ["Inca Trail", "Huayna Picchu", "Sacred Valley", "Ollantaytambo"]},
-    "lima":         {"plaza": "Lima",                        "top": "Larco Museum",              "extra": ["Miraflores", "Barranco", "Pachacamac", "Magic Water Circuit"]},
-    "arequipa":     {"plaza": "Arequipa",                    "top": "Colca Canyon",              "extra": ["Monastery of Santa Catalina, Arequipa", "El Misti", "Yanahuara", "Toro Muerto petroglyphs"]},
-    "puno":         {"plaza": "Puno",                        "top": "Lake Titicaca",             "extra": ["Uros people", "Sillustani", "Amantani", "Taquile"]},
-    "trujillo":     {"plaza": "Trujillo, La Libertad",       "top": "Chan Chan",                 "extra": ["Huaca de la Luna", "El Brujo", "Moche culture", "Huanchaco"]},
-    "iquitos":      {"plaza": "Iquitos",                     "top": "Amazon River",              "extra": ["Pacaya-Samiria National Reserve", "Amazon rainforest", "Belén, Iquitos", "Nauta, Peru"]},
-    "huaraz":       {"plaza": "Huaraz",                      "top": "Huascarán National Park",   "extra": ["Llanganuco Lakes", "Pastoruri Glacier", "Chavín de Huántar", "Cordillera Blanca"]},
-    "paracas":      {"plaza": "Paracas National Reserve",    "top": "Ballestas Islands",         "extra": ["Paracas, Peru", "Huacachina", "Ica, Peru", "Pisco"]},
-    "nazca":        {"plaza": "Nazca",                       "top": "Nazca Lines",               "extra": ["Cahuachi", "Palpa, Peru", "Maria Reiche", "Cantalloc aqueduct"]},
-    "chiclayo":     {"plaza": "Chiclayo",                    "top": "Huaca Rajada",              "extra": ["Sipán", "Lambayeque", "Túcume", "Brüning National Museum"]},
-    "ayacucho":     {"plaza": "Ayacucho",                    "top": "Wari (culture)",            "extra": ["Battle of Ayacucho", "Quinua, Ayacucho", "Huanta", "Vilcashuamán"]},
-    "cajamarca":    {"plaza": "Cajamarca",                   "top": "Cumbe Mayo",                "extra": ["Baños del Inca", "Ventanillas de Otuzco", "Porcón", "Cajamarca Region"]},
-    "tarapoto":     {"plaza": "Tarapoto",                    "top": "Amazon rainforest",         "extra": ["Ahuashiyacu", "Sauce, San Martín", "San Martín Region", "Lamas, Peru"]},
-    "tacna":        {"plaza": "Tacna",                       "top": "Tacna Region",              "extra": ["Toquepala", "Laguna Aricota", "Candarave Province", "Tacna Cathedral"]},
-    "piura":        {"plaza": "Piura",                       "top": "Máncora",                   "extra": ["Piura Region", "Catacaos", "Vichayito", "Huancabamba Province"]},
-    "huancayo":     {"plaza": "Huancayo",                    "top": "Mantaro Valley",            "extra": ["Junín Region", "Jauja", "Concepción, Junín", "Ingenio, Junín"]},
-    "ica":          {"plaza": "Ica, Peru",                   "top": "Huacachina",                "extra": ["Ica Region", "Chincha Alta", "Palpa, Peru", "Tambo Colorado"]},
+    # All article titles verified against Wikipedia REST Summary API — each has a confirmed thumbnail.
+    # extra[0-1] = gastronomy / food images, extra[2-3] = secondary tourist sites.
+    "cusco": {
+        "plaza": "Cusco",
+        "top":   "Machu Picchu",
+        "extra": ["Andean cuisine", "Chicharron", "Sacsayhuaman", "Qorikancha"],
+    },
+    "machu picchu": {
+        "plaza": "Aguas Calientes, Peru",
+        "top":   "Machu Picchu",
+        "extra": ["Ceviche", "Anticucho", "Inca Trail", "Ollantaytambo"],
+    },
+    "lima": {
+        "plaza": "Lima",
+        "top":   "Larco Museum",
+        "extra": ["Ceviche", "Lomo saltado", "Miraflores District, Lima", "Huaca Pucllana"],
+    },
+    "arequipa": {
+        "plaza": "Arequipa",
+        "top":   "Colca Canyon",
+        "extra": ["Rocoto relleno", "Aji de gallina", "Santa Catalina Monastery", "El Misti"],
+    },
+    "puno": {
+        "plaza": "Puno",
+        "top":   "Lake Titicaca",
+        "extra": ["Andean cuisine", "Pachamanca", "Sillustani", "Taquile"],
+    },
+    "trujillo": {
+        "plaza": "Trujillo, La Libertad",
+        "top":   "Chan Chan",
+        "extra": ["Ceviche", "Anticucho", "Lord of Sipan", "Huaca de la Luna"],
+    },
+    "iquitos": {
+        "plaza": "Iquitos",
+        "top":   "Amazon River",
+        "extra": ["Lomo saltado", "Peruvian Amazon", "Amazon rainforest", "Amazon basin"],
+    },
+    "huaraz": {
+        "plaza": "Huaraz",
+        "top":   "Huascarán National Park",
+        "extra": ["Andean cuisine", "Chicharron", "Llanganuco Lakes", "Cordillera Blanca"],
+    },
+    "paracas": {
+        "plaza": "Paracas National Reserve",
+        "top":   "Ballestas Islands",
+        "extra": ["Pisco sour", "Ceviche", "Huacachina", "Chincha Alta"],
+    },
+    "nazca": {
+        "plaza": "Nazca",
+        "top":   "Nazca Lines",
+        "extra": ["Ceviche", "Tiradito", "Maria Reiche", "Tambo Colorado"],
+    },
+    "chiclayo": {
+        "plaza": "Chiclayo",
+        "top":   "Huaca Rajada",
+        "extra": ["Ceviche", "Anticucho", "Lord of Sipan", "Huaca de la Luna"],
+    },
+    "ayacucho": {
+        "plaza": "Ayacucho",
+        "top":   "Wari empire",
+        "extra": ["Andean cuisine", "Pachamanca", "Battle of Ayacucho", "Ventanillas de Otuzco"],
+    },
+    "cajamarca": {
+        "plaza": "Cajamarca",
+        "top":   "Cumbe Mayo",
+        "extra": ["Andean cuisine", "Papa a la huancaina", "Ventanillas de Otuzco", "Barranco District"],
+    },
+    "tarapoto": {
+        "plaza": "Tarapoto",
+        "top":   "Amazon rainforest",
+        "extra": ["Lomo saltado", "Peruvian Amazon", "San Martin Region", "Amazon basin"],
+    },
+    "tacna": {
+        "plaza": "Tacna",
+        "top":   "Tacna Cathedral",
+        "extra": ["Ceviche", "Aji de gallina", "Tacna Region", "El Misti"],
+    },
+    "piura": {
+        "plaza": "Piura",
+        "top":   "Máncora",
+        "extra": ["Ceviche", "Tiradito", "Catacaos", "Huancabamba"],
+    },
+    "huancayo": {
+        "plaza": "Huancayo",
+        "top":   "Mantaro Valley",
+        "extra": ["Andean cuisine", "Pachamanca", "Papa a la huancaina", "Llanganuco Lakes"],
+    },
+    "ica": {
+        "plaza": "Ica, Peru",
+        "top":   "Huacachina",
+        "extra": ["Pisco sour", "Tiradito", "Chincha Alta", "Tambo Colorado"],
+    },
 }
 
 
@@ -223,33 +299,32 @@ def _build_route_map_sync(coords: list[tuple], from_xy: tuple, to_xy: tuple) -> 
     return buf.getvalue()
 
 
-async def _wiki_image(client: httpx.AsyncClient, page: str, size: int = 380) -> dict | None:
-    """Fetch a Wikipedia page thumbnail via the REST Summary API (handles redirects automatically).
+async def _wiki_image(client: httpx.AsyncClient, page: str) -> dict | None:
+    """Return a Wikipedia thumbnail URL via the REST Summary API (follows redirects).
 
-    Returns {title, data: 'data:image/jpeg;base64,...'} or None.
-    The REST API returns thumbnail.source pointing to a Wikimedia image URL.
-    Images may be WebP — the frontend must convert via Canvas before passing to jsPDF.
+    Returns {"title": page, "url": "https://upload.wikimedia.org/..."} or None.
+    The caller (frontend) loads the image directly from Wikimedia CDN — this avoids
+    server-side download, eliminates rate-limit issues, and lets the browser cache images.
+    The frontend converts URL→JPEG via Canvas before passing to jsPDF (handles WebP).
     """
     try:
         encoded = urllib.parse.quote(page.replace(" ", "_"), safe="")
         resp = await client.get(
             f"{_WIKI_REST}/{encoded}",
             headers=_IMG_HEADERS,
-            timeout=10.0,
+            timeout=8.0,
             follow_redirects=True,
         )
         if resp.status_code != 200:
             return None
         data = resp.json()
-        src = data.get("thumbnail", {}).get("source")
-        if not src:
+        url = data.get("thumbnail", {}).get("source")
+        if not url:
             return None
-        img = await client.get(src, headers=_IMG_HEADERS, timeout=12.0, follow_redirects=True)
-        if img.status_code != 200:
-            return None
-        ct = img.headers.get("content-type", "image/jpeg").split(";")[0]
-        b64 = base64.b64encode(img.content).decode()
-        return {"title": page, "data": f"data:{ct};base64,{b64}"}
+        # Upgrade default thumbnail resolution from ~320px to 640px for better quality.
+        # Wikimedia URL pattern: .../320px-Filename.jpg → .../640px-Filename.jpg
+        url = re.sub(r"/\d+px-", "/640px-", url)
+        return {"title": page, "url": url}
     except Exception:
         return None
 
@@ -269,27 +344,30 @@ def health() -> HealthResponse:
 
 @app.get("/images/{destination}", tags=["utils"])
 async def get_destination_images(destination: str) -> dict:
-    """Fetch Wikipedia images for a Peru destination (server-side proxy to avoid CORS).
+    """Return Wikipedia thumbnail URLs for a Peru destination.
 
-    Returns: {plaza, top, extras[]} each with {title, data: 'data:image/...;base64,...'}.
+    Each image entry is {title, url} where url points to Wikimedia CDN (640px).
+    The browser loads images directly from Wikimedia — no server-side proxy.
+    Returns: {plaza, top, extras[]} where each value is {title, url} or null.
     """
     key = destination.lower().strip()
     info = _DEST_IMG_MAP.get(key, {
-        "plaza": f"{destination} Peru",
-        "top": destination,
-        "extra": [f"{destination} Peru tourism"],
+        "plaza": f"{destination}",
+        "top":   f"Tourism in {destination}",
+        "extra": ["Peruvian cuisine"],
     })
 
+    extra_pages = info.get("extra", [])[:4]
     async with httpx.AsyncClient(headers=_IMG_HEADERS, follow_redirects=True) as client:
-        plaza_img, top_img = await asyncio.gather(
+        results = await asyncio.gather(
             _wiki_image(client, info["plaza"]),
             _wiki_image(client, info["top"]),
+            *[_wiki_image(client, p) for p in extra_pages],
         )
-        extras: list[dict] = []
-        for page in info.get("extra", [])[:4]:
-            img = await _wiki_image(client, page)
-            if img:
-                extras.append(img)
+
+    plaza_img = results[0]
+    top_img   = results[1]
+    extras    = [r for r in results[2:] if r]
 
     return {"plaza": plaza_img, "top": top_img, "extras": extras}
 

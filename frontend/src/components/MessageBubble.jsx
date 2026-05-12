@@ -202,7 +202,16 @@ export default function MessageBubble({ role, content, usedSearch = false, isErr
         <div className="bubble-img-gallery">
           {imgList.map((img, i) => (
             <div key={i} className="bubble-img-item">
-              <img src={img.data} alt={img.title} className="bubble-img" loading="lazy" />
+              {/* crossOrigin="anonymous" lets the browser cache with CORS headers so
+                  prepareImgForPDF can later draw the cached image to canvas without tainting it */}
+              <img
+                src={img.url || img.data}
+                alt={img.title}
+                className="bubble-img"
+                loading="lazy"
+                crossOrigin="anonymous"
+                onError={e => { e.currentTarget.style.display = 'none' }}
+              />
               <span className="bubble-img-cap">{img.title}</span>
             </div>
           ))}
