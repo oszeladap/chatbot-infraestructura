@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import io
 import os
 import tempfile
 import uuid
@@ -171,6 +172,56 @@ _DEST_IMG_MAP: dict[str, dict[str, Any]] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Route map — real OSM tile map with walking route drawn on it
+# ---------------------------------------------------------------------------
+
+_NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+_OSRM_DRIVE    = "https://router.project-osrm.org/route/v1/driving"
+_NOM_HDR       = {"User-Agent": "TravelPeru/2.2 oszeladap@gmail.com"}
+
+# Top attraction per destination city (mirrors frontend TOP_ATTRACTION dict)
+_TOP_ATTR: dict[str, str] = {
+    "cusco":        "Sacsayhuaman",
+    "machu picchu": "Machu Picchu Citadel",
+    "lima":         "Larco Museum",
+    "arequipa":     "Monastery of Santa Catalina",
+    "puno":         "Mirador El Condor",
+    "trujillo":     "Chan Chan",
+    "iquitos":      "Belen Market",
+    "huaraz":       "Llanganuco Lakes",
+    "paracas":      "Paracas National Reserve",
+    "nazca":        "Nazca Lines Viewpoint",
+    "chiclayo":     "Huaca Rajada",
+    "ayacucho":     "Wari Archaeological Site",
+    "cajamarca":    "Cumbe Mayo",
+    "tarapoto":     "Ahuashiyacu Waterfall",
+    "tacna":        "Tacna Cathedral",
+    "piura":        "Catedral de Piura",
+    "huancayo":     "Huancayo Cathedral",
+    "ica":          "Huacachina",
+}
+
+
+def _build_route_map_sync(coords: list[tuple], from_xy: tuple, to_xy: tuple) -> bytes:
+    """Render a real OSM static map with route polyline. Runs in thread pool."""
+    from staticmap import StaticMap, Line, CircleMarker
+    m = StaticMap(
+        640, 340,
+        url_template="https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        headers={"User-Agent": "TravelPeru/2.2 oszeladap@gmail.com"},
+        tile_request_timeout=12,
+    )
+    if coords:
+        m.add_line(Line(coords, "#1565A0", 4))
+    m.add_marker(CircleMarker(from_xy, "#1E6DC8", 16))
+    m.add_marker(CircleMarker(to_xy,   "#DC2626", 16))
+    image = m.render()
+    buf = io.BytesIO()
+    image.save(buf, format="PNG")
+    return buf.getvalue()
+
+
 async def _wiki_image(client: httpx.AsyncClient, page: str, size: int = 380) -> dict | None:
     """Fetch a Wikipedia page thumbnail and return {title, data: 'data:image/jpeg;base64,...'}."""
     try:
@@ -232,6 +283,67 @@ async def get_destination_images(destination: str) -> dict:
                 extras.append(img)
 
     return {"plaza": plaza_img, "top": top_img, "extras": extras}
+
+
+@app.get("/route-map/{destination}", tags=["utils"])
+async def get_route_map(destination: str) -> dict:
+    """Return a base64 PNG of the real OSM driving route from Plaza de Armas to the top attraction.
+
+    Uses staticmap + OpenStreetMap tiles to render an actual street-level map.
+    """
+    key = destination.lower().strip()
+    top_name = _TOP_ATTR.get(key)
+    if not top_name:
+        raise HTTPException(status_code=404, detail=f"No route map configured for '{destination}'.")
+
+    from_q = f"Plaza de Armas {destination} Peru"
+    to_q   = f"{top_name} {destination} Peru"
+
+    try:
+        async with httpx.AsyncClient(headers=_NOM_HDR, timeout=10.0) as client:
+            r1_resp, r2_resp = await asyncio.gather(
+                client.get(_NOMINATIM_URL, params={"q": from_q, "format": "json", "limit": 1, "countrycodes": "pe"}),
+                client.get(_NOMINATIM_URL, params={"q": to_q,   "format": "json", "limit": 1, "countrycodes": "pe"}),
+            )
+        r1 = r1_resp.json()
+        r2 = r2_resp.json()
+        if not r1 or not r2:
+            raise ValueError("Geocoding returned no results")
+
+        lon1, lat1 = float(r1[0]["lon"]), float(r1[0]["lat"])
+        lon2, lat2 = float(r2[0]["lon"]), float(r2[0]["lat"])
+
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            route_resp = await client.get(
+                f"{_OSRM_DRIVE}/{lon1},{lat1};{lon2},{lat2}",
+                params={"overview": "full", "geometries": "geojson"},
+            )
+        route_data = route_resp.json()
+
+        coords: list[tuple] = []
+        walk_dist = walk_dur = 0
+        if route_data.get("code") == "Ok":
+            route = route_data["routes"][0]
+            coords = [(c[0], c[1]) for c in route["geometry"]["coordinates"]]
+            walk_dist = round(route["distance"])
+            walk_dur  = round(route["duration"] / 60)
+
+        # Render map in thread pool (staticmap is synchronous)
+        loop = asyncio.get_running_loop()
+        img_bytes = await loop.run_in_executor(
+            None, _build_route_map_sync, coords, (lon1, lat1), (lon2, lat2)
+        )
+        b64 = base64.b64encode(img_bytes).decode()
+        return {
+            "image":      f"data:image/png;base64,{b64}",
+            "from_label": from_q,
+            "to_label":   to_q,
+            "top_name":   top_name,
+            "dist_m":     walk_dist,
+            "dur_min":    walk_dur,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Route map generation failed: {exc}")
 
 
 @app.post(

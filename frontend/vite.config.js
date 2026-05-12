@@ -13,8 +13,9 @@ export default defineConfig({
       '/profile': 'http://localhost:8000',
       '/health':  'http://localhost:8000',
       '/admin':   'http://localhost:8000',
-      '/summary': 'http://localhost:8000',
-      '/images':  'http://localhost:8000',
+      '/summary':   'http://localhost:8000',
+      '/images':    'http://localhost:8000',
+      '/route-map': 'http://localhost:8000',
     },
   },
   build: {

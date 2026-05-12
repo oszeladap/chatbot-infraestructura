@@ -121,6 +121,14 @@ function titleCaseCity(city) {
   return city.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
 }
 
+// Find a known Peru city inside any raw text (e.g. "Cusco, Perú" → "Cusco")
+function normalizeDestCity(rawText) {
+  if (!rawText) return ''
+  const lower = rawText.toLowerCase()
+  const found = PERU_CITY_LIST.find(c => lower.includes(c))
+  return found ? titleCaseCity(found) : ''
+}
+
 function extractDestCity(messages) {
   // Step 1: explicit destination patterns in user messages
   const userText = messages
@@ -525,113 +533,96 @@ async function exportPDF(messages, userEmail, userCity = '', apiFetch = null) {
       y += 14
     }
 
-    // ── Galería fotográfica del destino (solo en LUGARES, mín 4 fotos en 2×2) ──
-    if (sec.title.includes('LUGARES') && allImgs.length > 0) {
-      const showImgs = allImgs.slice(0, 4)
-      const COLS = 2
-      const imgW = Math.floor((CW - 8) / COLS)
-      const imgH = Math.round(imgW * 0.58)
-      const numRows = Math.ceil(showImgs.length / COLS)
-      const galH = 18 + numRows * (imgH + 16) + 4
-      if (y + galH > pageH - M) { doc.addPage(); y = M }
-      const galStartY = y
-      doc.setFillColor(245, 243, 255)
-      doc.rect(M, galStartY, CW, galH, 'F')
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(109, 40, 217)
-      doc.text('GALERIA FOTOGRAFICA DEL DESTINO', M + 6, galStartY + 12)
-      for (let di = 0; di < showImgs.length; di++) {
-        const img = showImgs[di]
-        const col = di % COLS
-        const row = Math.floor(di / COLS)
-        const ix = M + col * (imgW + 8)
-        const iy = galStartY + 18 + row * (imgH + 16)
-        try {
-          const fmt = img.data.includes('image/png') ? 'PNG' : 'JPEG'
-          doc.addImage(img.data, fmt, ix, iy, imgW, imgH)
-          doc.setFont('helvetica', 'italic'); doc.setFontSize(6); doc.setTextColor(90, 70, 130)
-          doc.text(normalizePDF(img.title), ix + imgW / 2, iy + imgH + 8, { align: 'center', maxWidth: imgW })
-        } catch {}
-      }
-      y = galStartY + galH
-    }
-
     y += 18
   }
 
-  // ── Sección de ruta visual ────────────────────────────────────────────────
-  if (destCity) {
-    const destKey  = destCity.toLowerCase()
-    const topAttr  = TOP_ATTRACTION[destKey]
-    if (topAttr) {
-      const fromQ   = `Plaza de Armas ${destCity} Peru`
-      const toQ     = `${topAttr} ${destCity} Peru`
-      const topName = normalizePDF(topAttr)
-
-      // Header
-      if (y + 200 > pageH - M) { doc.addPage(); y = M }
-      doc.setFillColor(15, 35, 80); doc.rect(M, y, CW, 24, 'F')
-      doc.setTextColor(232, 184, 75); doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
-      doc.text(`COMO LLEGAR: Plaza de Armas => ${topName}`, M + 8, y + 16)
-      y += 24
-
-      // Fetch routes (walking + driving)
-      const routes = await fetchRoute(fromQ, toQ)
-      const walk  = routes?.walk
-      const drive = routes?.drive
-
-      // Google Maps URLs
-      const gmBase  = 'https://www.google.com/maps/dir/?api=1'
-      const gmFrom  = encodeURIComponent(fromQ)
-      const gmTo    = encodeURIComponent(toQ)
-      const walkUrl = `${gmBase}&origin=${gmFrom}&destination=${gmTo}&travelmode=walking`
-      const driveUrl= `${gmBase}&origin=${gmFrom}&destination=${gmTo}&travelmode=driving`
-
-      // Distance/time info bar
-      const infoH = 20; doc.setFillColor(235, 244, 255); doc.rect(M, y, CW, infoH, 'F')
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(21, 101, 160)
-      const walkInfo  = walk  ? `A pie: ~${walk.duration} min (${walk.distance}m)` : 'A pie: ver Google Maps'
-      const driveInfo = drive ? `Vehiculo: ~${drive.duration} min (${Math.round(drive.distance/1000*10)/10}km)` : 'Vehiculo: ver Google Maps'
-      doc.text(`${walkInfo}   |   ${driveInfo}`, M + 8, y + 13)
-      y += infoH + 6
-
-      // Two-column: map diagram | step-by-step text
-      const mapW  = Math.floor(CW * 0.48)
-      const stW   = CW - mapW - 8
-      const stX   = M + mapW + 8
-      const mapH  = 118
-      drawRouteMapDiagram(doc, M, y, mapW, mapH, 'Plaza de Armas', topName)
-
-      // Steps column
-      const steps = walk?.steps ?? []
-      let sy = y + 2
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(15, 25, 65)
-      doc.text('Pasos a pie:', stX, sy + 8); sy += 14
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(30, 40, 70)
-      let stepNum = 1
-      for (const step of steps.filter(s => s.dist > 0).slice(0, 7)) {
-        const txt = `${stepNum}. ${normalizePDF(step.instr)}${step.dist > 5 ? ` (${step.dist}m)` : ''}`
-        const ll  = doc.splitTextToSize(txt, stW - 4)
-        const sH  = ll.length * 9 + 2
-        if (sy + sH > y + mapH) break
-        doc.text(ll, stX, sy); sy += sH
-        stepNum++
-      }
-      y += mapH + 10
-
-      // Clickable Google Maps buttons (two columns)
-      const btnH = 22; const btnW = Math.floor((CW - 6) / 2)
-      if (y + btnH > pageH - M) { doc.addPage(); y = M }
-
-      doc.setFillColor(21, 101, 160); doc.rect(M, y, btnW, btnH, 'F')
-      doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(8)
-      doc.text('Ruta a pie en Google Maps ->', M + 8, y + 14)
-      doc.link(M, y, btnW, btnH, { url: walkUrl })
-
-      doc.setFillColor(180, 83, 9); doc.rect(M + btnW + 6, y, btnW, btnH, 'F')
-      doc.text('Ruta en vehiculo en Google Maps ->', M + btnW + 14, y + 14)
-      doc.link(M + btnW + 6, y, btnW, btnH, { url: driveUrl })
-      y += btnH + 16
+  // ── Galería fotográfica del destino — SECCIÓN INDEPENDIENTE (siempre visible) ──
+  if (allImgs.length > 0) {
+    const showImgs = allImgs.slice(0, 4)
+    const COLS = 2
+    const imgW = Math.floor((CW - 8) / COLS)
+    const imgH = Math.round(imgW * 0.58)
+    const numRows = Math.ceil(showImgs.length / COLS)
+    const galH = 30 + numRows * (imgH + 18) + 4
+    if (y + galH > pageH - M) { doc.addPage(); y = M }
+    const galStartY = y
+    // Header de galería
+    doc.setFillColor(109, 40, 217); doc.rect(M, galStartY, CW, 22, 'F')
+    doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
+    doc.text('GALERIA FOTOGRAFICA DE LA CIUDAD DESTINO', M + 8, galStartY + 15)
+    doc.setFillColor(245, 243, 255); doc.rect(M, galStartY + 22, CW, galH - 22, 'F')
+    const imgStartY = galStartY + 28
+    for (let di = 0; di < showImgs.length; di++) {
+      const img = showImgs[di]
+      const col = di % COLS
+      const row = Math.floor(di / COLS)
+      const ix = M + col * (imgW + 8)
+      const iy = imgStartY + row * (imgH + 18)
+      try {
+        const fmt = img.data.includes('image/png') ? 'PNG' : 'JPEG'
+        doc.addImage(img.data, fmt, ix, iy, imgW, imgH)
+        doc.setFont('helvetica', 'italic'); doc.setFontSize(6); doc.setTextColor(90, 70, 130)
+        doc.text(normalizePDF(img.title), ix + imgW / 2, iy + imgH + 8, { align: 'center', maxWidth: imgW })
+      } catch {}
     }
+    y = galStartY + galH + 14
+  }
+
+  // ── Sección de ruta — mapa OSM real ──────────────────────────────────────
+  if (destCity && apiFetch) {
+    try {
+      const routeRes = await apiFetch(`/route-map/${encodeURIComponent(destCity.toLowerCase())}`)
+      if (routeRes.ok) {
+        const rd = await routeRes.json()
+        const topName  = normalizePDF(rd.top_name ?? destCity)
+        const fromQ    = rd.from_label ?? `Plaza de Armas ${destCity} Peru`
+        const toQ      = rd.to_label   ?? topName
+        const distInfo = rd.dist_m > 0 ? `Distancia: ~${Math.round(rd.dist_m / 100) / 10} km` : ''
+        const durInfo  = rd.dur_min > 0 ? `  |  Tiempo en vehiculo: ~${rd.dur_min} min` : ''
+
+        const gmBase   = 'https://www.google.com/maps/dir/?api=1'
+        const gmFrom   = encodeURIComponent(fromQ)
+        const gmTo     = encodeURIComponent(toQ)
+        const walkUrl  = `${gmBase}&origin=${gmFrom}&destination=${gmTo}&travelmode=walking`
+        const driveUrl = `${gmBase}&origin=${gmFrom}&destination=${gmTo}&travelmode=driving`
+
+        // Section header
+        if (y + 260 > pageH - M) { doc.addPage(); y = M }
+        doc.setFillColor(15, 35, 80); doc.rect(M, y, CW, 24, 'F')
+        doc.setTextColor(232, 184, 75); doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
+        doc.text(`COMO LLEGAR: Plaza de Armas ${normalizePDF(destCity)} -> ${topName}`, M + 8, y + 16)
+        y += 24
+
+        // Distance/time bar
+        if (distInfo) {
+          doc.setFillColor(235, 244, 255); doc.rect(M, y, CW, 18, 'F')
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(21, 101, 160)
+          doc.text(`${distInfo}${durInfo}`, M + 8, y + 12)
+          y += 18
+        }
+
+        // Real OSM map image (full width)
+        const mapImgH = 200
+        if (y + mapImgH > pageH - M) { doc.addPage(); y = M }
+        try {
+          doc.addImage(rd.image, 'PNG', M, y, CW, mapImgH)
+        } catch {}
+        y += mapImgH + 8
+
+        // Clickable Google Maps buttons
+        const btnH = 24; const btnW = Math.floor((CW - 6) / 2)
+        if (y + btnH > pageH - M) { doc.addPage(); y = M }
+        doc.setFillColor(21, 101, 160); doc.rect(M, y, btnW, btnH, 'F')
+        doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(8)
+        doc.text('Ver ruta a pie en Google Maps ->', M + 8, y + 15)
+        doc.link(M, y, btnW, btnH, { url: walkUrl })
+
+        doc.setFillColor(180, 83, 9); doc.rect(M + btnW + 6, y, btnW, btnH, 'F')
+        doc.text('Ver ruta en vehiculo en Google Maps ->', M + btnW + 14, y + 15)
+        doc.link(M + btnW + 6, y, btnW, btnH, { url: driveUrl })
+        y += btnH + 16
+      }
+    } catch {}
   }
 
   // ── PIE DE PÁGINA ─────────────────────────────────────────────────────────
@@ -669,7 +660,8 @@ async function exportPDFSummary(messages, userEmail, chatId, apiFetch, cachedSum
   }
 
   // ── Filename con origen y destino ─────────────────────────────────────────
-  const destCity = extractDestCity(messages)
+  // Priority: conversation context → AI summary destino field
+  const destCity = extractDestCity(messages) || normalizeDestCity(s?.destino ?? '')
   const originCity = userCity || 'Peru'
   const dateTag = new Date().toISOString().slice(0, 10)
   const sumFilename = destCity
@@ -739,7 +731,7 @@ async function exportPDFSummary(messages, userEmail, chatId, apiFetch, cachedSum
   y += 28
 
   // ── Imágenes obligatorias: Plaza de Armas + Lugar Top ────────────────────
-  const sumImgData = await fetchBackendImages(destCity || (s.destino !== nd ? s.destino : ''), apiFetch)
+  const sumImgData = await fetchBackendImages(destCity, apiFetch)
   const imgPlaza = sumImgData.plaza
   const imgTop   = sumImgData.top
   if (imgPlaza || imgTop) {

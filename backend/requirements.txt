@@ -8,5 +8,7 @@ tavily-python==0.3.3
 python-dotenv==1.0.1
 pydantic==2.8.2
 httpx==0.27.2
+Pillow>=10.0.0
+staticmap==0.5.2
 # numpy pulled transitively by langchain; pinned here to force a pre-built wheel
 numpy>=1.26.0,<2.0.0
