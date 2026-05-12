@@ -2,7 +2,7 @@
 
 Asistente conversacional especializado en viajes dentro del Perú. Permite a los viajeros consultar en tiempo real vuelos, rutas de bus, hospedaje, gastronomía, atracciones turísticas y condiciones climáticas de cualquier ciudad peruana, combinando inteligencia artificial con búsqueda web actualizada, galería fotográfica de destinos y reportes PDF enriquecidos.
 
-> **Desarrollado por Oscar Zelada Pozo** · React 18 + Vite · FastAPI · Mistral AI · Tavily · Firebase · Firestore · Railway
+> **Desarrollado por Oscar Zelada Pozo** · React 18 + Vite · FastAPI · Mistral AI · Tavily · Firebase · Firestore · Railway · v2.2 — Mayo 2026
 
 ---
 
@@ -19,10 +19,11 @@ Asistente conversacional especializado en viajes dentro del Perú. Permite a los
 - **Fecha de referencia automática** — el asistente considera siempre la fecha actual para temporadas, disponibilidad y precios vigentes.
 - **Búsqueda web en tiempo real** — Tavily recupera precios y condiciones actualizadas; el badge 🔍 indica cuándo se usó.
 
-### Galería fotográfica de destinos (NUEVO)
-- **Imágenes automáticas en el chat** — tras cada respuesta que mencione una ciudad peruana, el sistema muestra automáticamente **3 fotografías** del destino: Plaza de Armas, atracción principal y lugar adicional.
-- Las imágenes se obtienen mediante un **proxy backend** que consulta Wikimedia Commons sin restricciones CORS; el navegador nunca toca servicios externos de imágenes directamente.
-- **18 ciudades mapeadas**: Cusco, Lima, Arequipa, Puno, Trujillo, Iquitos, Huaraz, Paracas, Nazca, Chiclayo, Ayacucho, Cajamarca, Tarapoto, Tacna, Piura, Huancayo, Ica y Machu Picchu.
+### Galería fotográfica de destinos
+- **Imágenes automáticas en el chat** — tras cada respuesta del asistente, el sistema muestra automáticamente **mínimo 4 fotografías** del destino en cuadrícula **2×2**: Plaza de Armas, atracción principal y hasta 2 lugares adicionales (monumentos, naturaleza, gastronomía local).
+- **Detección inteligente del destino** — el sistema analiza la conversación completa en 3 pasos: (1) patrones directos del usuario como "viajar a Cusco", (2) ciudad más mencionada en las respuestas del asistente, (3) primera ciudad encontrada como respaldo.
+- Las imágenes se obtienen mediante un **proxy backend** que consulta Wikimedia Commons sin restricciones CORS; el navegador nunca realiza peticiones a servicios externos de imágenes.
+- **18 ciudades mapeadas con hasta 6 imágenes cada una**: Cusco, Lima, Arequipa, Puno, Trujillo, Iquitos, Huaraz, Paracas, Nazca, Chiclayo, Ayacucho, Cajamarca, Tarapoto, Tacna, Piura, Huancayo, Ica y Machu Picchu.
 
 ### Interfaz de usuario
 - **Historial de chats por sesión** — cada conversación se guarda en Firestore con ID basado en fecha/hora (`YYYYMMDD_HHmmss_mmm`). Se puede navegar entre chats anteriores desde el sidebar.
@@ -36,11 +37,11 @@ Asistente conversacional especializado en viajes dentro del Perú. Permite a los
 ### Exportación PDF — dos modos
 
 #### Reporte Detallado (botón **PDF**)
-Documento completo con todas las conversaciones organizadas por tema:
+Documento completo con todas las conversaciones organizadas por tema. El botón muestra **"Generando…"** durante el proceso y queda deshabilitado para evitar clics dobles. Si ocurre algún error se muestra un mensaje descriptivo.
 
 - **Nombre de archivo inteligente**: `Detalle_viaje_<origen>_<destino>_<fecha>.pdf`
-  - Origen obtenido por **geolocalización** del navegador (Nominatim reverse geocoding).
-  - Destino detectado automáticamente de los mensajes del chat.
+  - **Origen** obtenido por geolocalización del navegador (Nominatim reverse geocoding).
+  - **Destino** detectado de la conversación completa (patrones directos del usuario → ciudad más mencionada por el asistente → fallback).
 - **Portada** con fondo azul/dorado peruano, título del sistema, fecha, hora y usuario.
 - **Secciones por tema** (solo aparecen si hay contenido relevante):
   1. ✈️ Costos de Viaje en Vuelo y Bus — Comparativas
@@ -49,24 +50,24 @@ Documento completo con todas las conversaciones organizadas por tema:
   4. 🍽️ Costos de Alimentación y Transporte Local
   5. 🗺️ Lugares que Visitar y sus Costos
   6. ℹ️ Otros Datos de Interés para el Turista
-- **Galería fotográfica**: mínimo 3 fotos del destino (Plaza de Armas, atracción top y extra) obtenidas vía backend proxy de Wikimedia Commons.
-- **Sección de ruta — CÓMO LLEGAR**:
+- **Galería fotográfica en cuadrícula 2×2**: mínimo 4 fotos del destino (Plaza de Armas, atracción top, y hasta 2 lugares adicionales) en dos filas de 2 columnas, obtenidas vía backend proxy de Wikimedia Commons.
+- **Sección de ruta — CÓMO LLEGAR** (solo para el destino del viaje):
+  - Punto de inicio: **Plaza de Armas de la ciudad destino** (no de la ciudad de origen).
   - **Diagrama visual tipo mapa**: fondo beige estilo OSM, cuadrícula de calles, arco parabólico azul del punto A al B, marcadores circulares con letras.
-  - **Barra de tiempos**: distancia y duración a pie y en vehículo calculadas con OSRM.
+  - **Barra de tiempos**: distancia y duración a pie y en vehículo calculadas con OSRM (timeout 9 s para evitar bloqueos).
   - **Pasos a pie**: instrucciones paso a paso junto al diagrama.
   - **2 botones clickeables** que abren Google Maps:
     - 🚶 Ruta a pie en Google Maps
     - 🚗 Ruta en vehículo en Google Maps
-  - Ruta calculada desde la Plaza de Armas hasta la atracción principal del destino.
 - Cada Q/A aparece en **una sola sección** (primera coincidencia gana — sin duplicados).
 - **Pie de página** en cada hoja con número de página y nombre del sistema.
 
 #### Resumen Ejecutivo (botón **Resumen ✓**)
-Documento condensado de **máximo 2 páginas** generado por IA (Mistral AI):
+Documento condensado de **máximo 2 páginas** generado por IA (Mistral AI). El botón muestra **"Generando…"** mientras procesa y cualquier error es notificado al usuario.
 
 - **Pre-generado automáticamente** tras cada respuesta del asistente — el botón muestra `✓` cuando el resumen está listo en caché y la descarga es **instantánea** (sin espera).
 - **Nombre de archivo inteligente**: `Resumen_viaje_<origen>_<destino>_<fecha>.pdf`.
-- **2 imágenes obligatorias**: Plaza de Armas de la ciudad + principal atracción turística, siempre presentes.
+- **2 imágenes obligatorias de la ciudad destino**: Plaza de Armas + principal atracción turística, siempre presentes y correctamente asociadas al destino del viaje.
 - Estructura visual escaneable en una sola vista:
   - Franja de destino destacada (fondo azul oscuro, texto dorado).
   - **Columna izquierda**: Condiciones climáticas — temperatura, descripción, recomendación de ropa.
@@ -225,7 +226,7 @@ chatbot-infraestructura/
 │           │                       #   geolocalización, modal Acerca de
 │           ├── Sidebar.jsx         # Panel lateral con historial de chats por fecha/hora
 │           ├── MessageBubble.jsx   # Burbuja con markdown, chips temáticos
-│           │                       #   y galería fotográfica del destino (3 imágenes)
+│           │                       #   y galería fotográfica del destino (4 imágenes, 2×2)
 │           └── AdminPanel.jsx/.css # Panel de administración de usuarios y roles
 │
 ├── CASO_DE_USO.md                  # Documentación UML 2.5 / IEEE 830 / RUP
@@ -429,7 +430,7 @@ La documentación interactiva Swagger está disponible en `/docs`.
 | | |
 |---|---|
 | **Desarrollador** | Oscar Zelada Pozo |
-| **Versión** | 2.1 — Mayo 2026 |
+| **Versión** | 2.2 — Mayo 2026 |
 | **Stack principal** | React 18 · FastAPI · Mistral AI · Firebase · Firestore · Railway |
 | **Imágenes** | Wikimedia Commons (licencia libre) vía proxy backend |
 | **Mapas y rutas** | OpenStreetMap (Nominatim) + OSRM — datos © OpenStreetMap contributors |
