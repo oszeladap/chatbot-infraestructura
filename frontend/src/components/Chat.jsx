@@ -185,6 +185,29 @@ async function fetchBackendImages(destCity, apiFetch) {
   } catch { return { plaza: null, top: null, extras: [] } }
 }
 
+// Convert any image (including WebP) to JPEG via Canvas so jsPDF can embed it.
+// jsPDF only supports JPEG and PNG natively — Wikipedia often returns WebP.
+async function prepareImgForPDF(imgObj) {
+  if (!imgObj?.data) return null
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas')
+        canvas.width  = img.naturalWidth  || 640
+        canvas.height = img.naturalHeight || 400
+        const ctx = canvas.getContext('2d')
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+        ctx.drawImage(img, 0, 0)
+        resolve({ title: imgObj.title, data: canvas.toDataURL('image/jpeg', 0.88) })
+      } catch { resolve(null) }
+    }
+    img.onerror = () => resolve(null)
+    img.src = imgObj.data
+  })
+}
+
 // ── Route helpers ─────────────────────────────────────────────────────────────
 const MANEUVER_ES = {
   depart: 'Partir desde', arrive: 'Llegar al destino',
@@ -538,34 +561,35 @@ async function exportPDF(messages, userEmail, userCity = '', apiFetch = null) {
 
   // ── Galería fotográfica del destino — SECCIÓN INDEPENDIENTE (siempre visible) ──
   if (allImgs.length > 0) {
-    const showImgs = allImgs.slice(0, 4)
-    const COLS = 2
-    const imgW = Math.floor((CW - 8) / COLS)
-    const imgH = Math.round(imgW * 0.58)
-    const numRows = Math.ceil(showImgs.length / COLS)
-    const galH = 30 + numRows * (imgH + 18) + 4
-    if (y + galH > pageH - M) { doc.addPage(); y = M }
-    const galStartY = y
-    // Header de galería
-    doc.setFillColor(109, 40, 217); doc.rect(M, galStartY, CW, 22, 'F')
-    doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
-    doc.text('GALERIA FOTOGRAFICA DE LA CIUDAD DESTINO', M + 8, galStartY + 15)
-    doc.setFillColor(245, 243, 255); doc.rect(M, galStartY + 22, CW, galH - 22, 'F')
-    const imgStartY = galStartY + 28
-    for (let di = 0; di < showImgs.length; di++) {
-      const img = showImgs[di]
-      const col = di % COLS
-      const row = Math.floor(di / COLS)
-      const ix = M + col * (imgW + 8)
-      const iy = imgStartY + row * (imgH + 18)
-      try {
-        const fmt = img.data.includes('image/png') ? 'PNG' : 'JPEG'
-        doc.addImage(img.data, fmt, ix, iy, imgW, imgH)
-        doc.setFont('helvetica', 'italic'); doc.setFontSize(6); doc.setTextColor(90, 70, 130)
-        doc.text(normalizePDF(img.title), ix + imgW / 2, iy + imgH + 8, { align: 'center', maxWidth: imgW })
-      } catch {}
+    // Convert all images to JPEG via Canvas (handles WebP which jsPDF can't embed)
+    const preparedImgs = (await Promise.all(allImgs.slice(0, 4).map(prepareImgForPDF))).filter(Boolean)
+    if (preparedImgs.length > 0) {
+      const COLS = 2
+      const imgW = Math.floor((CW - 8) / COLS)
+      const imgH = Math.round(imgW * 0.58)
+      const numRows = Math.ceil(preparedImgs.length / COLS)
+      const galH = 30 + numRows * (imgH + 18) + 4
+      if (y + galH > pageH - M) { doc.addPage(); y = M }
+      const galStartY = y
+      doc.setFillColor(109, 40, 217); doc.rect(M, galStartY, CW, 22, 'F')
+      doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
+      doc.text('GALERIA FOTOGRAFICA DE LA CIUDAD DESTINO', M + 8, galStartY + 15)
+      doc.setFillColor(245, 243, 255); doc.rect(M, galStartY + 22, CW, galH - 22, 'F')
+      const imgStartY = galStartY + 28
+      for (let di = 0; di < preparedImgs.length; di++) {
+        const img = preparedImgs[di]
+        const col = di % COLS
+        const row = Math.floor(di / COLS)
+        const ix = M + col * (imgW + 8)
+        const iy = imgStartY + row * (imgH + 18)
+        try {
+          doc.addImage(img.data, 'JPEG', ix, iy, imgW, imgH)
+          doc.setFont('helvetica', 'italic'); doc.setFontSize(6); doc.setTextColor(90, 70, 130)
+          doc.text(normalizePDF(img.title), ix + imgW / 2, iy + imgH + 8, { align: 'center', maxWidth: imgW })
+        } catch {}
+      }
+      y = galStartY + galH + 14
     }
-    y = galStartY + galH + 14
   }
 
   // ── Sección de ruta — mapa OSM real ──────────────────────────────────────
@@ -732,8 +756,11 @@ async function exportPDFSummary(messages, userEmail, chatId, apiFetch, cachedSum
 
   // ── Imágenes obligatorias: Plaza de Armas + Lugar Top ────────────────────
   const sumImgData = await fetchBackendImages(destCity, apiFetch)
-  const imgPlaza = sumImgData.plaza
-  const imgTop   = sumImgData.top
+  // Convert to JPEG via Canvas before calling addImage (jsPDF cannot handle WebP)
+  const [imgPlaza, imgTop] = await Promise.all([
+    prepareImgForPDF(sumImgData.plaza),
+    prepareImgForPDF(sumImgData.top),
+  ])
   if (imgPlaza || imgTop) {
     const iH   = 96
     const iW   = Math.floor((CW - 8) / 2)
@@ -745,8 +772,7 @@ async function exportPDFSummary(messages, userEmail, chatId, apiFetch, cachedSum
     const drawSumImg = (img, ix) => {
       if (!img?.data) return
       try {
-        const fmt = img.data.includes('image/png') ? 'PNG' : 'JPEG'
-        doc.addImage(img.data, fmt, ix, y, iW, iH)
+        doc.addImage(img.data, 'JPEG', ix, y, iW, iH)
         doc.setFont('helvetica', 'italic'); doc.setFontSize(6); doc.setTextColor(100, 100, 130)
         doc.text(normalizePDF(img.title), ix + iW / 2, y + iH + 7, { align: 'center', maxWidth: iW })
       } catch {}
