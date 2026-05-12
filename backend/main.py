@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import os
 import tempfile
@@ -8,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Any
 
+import httpx
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env")   # must run before any other local import
 
@@ -136,6 +138,63 @@ class SummaryRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Destination images — Wikipedia / Wikimedia Commons proxy
+# Fetched server-side to avoid browser CORS issues.
+# ---------------------------------------------------------------------------
+
+_WIKI_API = "https://en.wikipedia.org/w/api.php"
+_IMG_HEADERS = {"User-Agent": "TravelPeru/2.1 oszeladap@gmail.com"}
+
+# Maps each destination (lowercase) to specific Wikipedia page titles:
+#   plaza → city/Plaza de Armas image
+#   top   → main tourist attraction image
+#   extra → additional place images (up to 2)
+_DEST_IMG_MAP: dict[str, dict[str, Any]] = {
+    "cusco":        {"plaza": "Plaza de Armas Cusco",       "top": "Machu Picchu",                     "extra": ["Sacsayhuaman", "Qorikancha"]},
+    "machu picchu": {"plaza": "Aguas Calientes Peru",       "top": "Machu Picchu",                     "extra": ["Inca Trail Peru"]},
+    "lima":         {"plaza": "Plaza Mayor Lima",           "top": "Larco Museum",                     "extra": ["Miraflores District Lima", "Barranco Lima"]},
+    "arequipa":     {"plaza": "Plaza de Armas Arequipa",    "top": "Colca Canyon",                     "extra": ["Monastery of Santa Catalina Arequipa", "El Misti"]},
+    "puno":         {"plaza": "Puno Peru",                  "top": "Lake Titicaca",                    "extra": ["Uros people", "Sillustani"]},
+    "trujillo":     {"plaza": "Trujillo Peru",              "top": "Chan Chan",                        "extra": ["Huaca Rajada", "El Brujo"]},
+    "iquitos":      {"plaza": "Iquitos",                    "top": "Amazon River",                     "extra": ["Pilpintuwasi", "Amazon rainforest Peru"]},
+    "huaraz":       {"plaza": "Huaraz",                     "top": "Huascaran National Park",          "extra": ["Llanganuco Lakes", "Pastoruri Glacier"]},
+    "paracas":      {"plaza": "Paracas National Reserve",   "top": "Ballestas Islands",                "extra": ["Paracas Peru"]},
+    "nazca":        {"plaza": "Nazca Peru",                 "top": "Nazca Lines",                      "extra": ["Cantalloc Aqueducts Peru"]},
+    "chiclayo":     {"plaza": "Chiclayo",                   "top": "Huaca Rajada",                     "extra": ["Royal Tombs of Sipan", "Batan Grande"]},
+    "ayacucho":     {"plaza": "Ayacucho Peru",              "top": "Wari Culture Peru",                "extra": ["Quinua Battlefield", "Huanta Peru"]},
+    "cajamarca":    {"plaza": "Cajamarca Peru",             "top": "Cumbe Mayo",                       "extra": ["Ventanillas de Otuzco", "Cajamarca Region"]},
+    "tarapoto":     {"plaza": "Tarapoto",                   "top": "Amazon rainforest Peru",           "extra": ["Ahuashiyacu Waterfall"]},
+    "tacna":        {"plaza": "Tacna Peru",                 "top": "Tacna Cathedral",                  "extra": ["Tacna Region"]},
+    "piura":        {"plaza": "Piura Peru",                 "top": "Mancora Peru",                     "extra": ["Piura Region"]},
+    "huancayo":     {"plaza": "Huancayo",                   "top": "Mantaro Valley",                   "extra": ["Huancayo Cathedral"]},
+    "ica":          {"plaza": "Ica Peru",                   "top": "Huacachina",                       "extra": ["Ica Region Peru"]},
+}
+
+
+async def _wiki_image(client: httpx.AsyncClient, page: str, size: int = 380) -> dict | None:
+    """Fetch a Wikipedia page thumbnail and return {title, data: 'data:image/jpeg;base64,...'}."""
+    try:
+        resp = await client.get(
+            _WIKI_API,
+            params={"action": "query", "titles": page, "prop": "pageimages",
+                    "format": "json", "pithumbsize": size},
+            timeout=10.0,
+        )
+        pages = resp.json().get("query", {}).get("pages", {})
+        src = list(pages.values())[0].get("thumbnail", {}).get("source")
+        if not src:
+            return None
+        img = await client.get(src, timeout=10.0)
+        if img.status_code != 200:
+            return None
+        ct = img.headers.get("content-type", "image/jpeg").split(";")[0]
+        b64 = base64.b64encode(img.content).decode()
+        return {"title": page, "data": f"data:{ct};base64,{b64}"}
+    except Exception:
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
@@ -146,6 +205,33 @@ def health() -> HealthResponse:
         status="ok",
         timestamp=datetime.now(timezone.utc).isoformat(),
     )
+
+
+@app.get("/images/{destination}", tags=["utils"])
+async def get_destination_images(destination: str) -> dict:
+    """Fetch Wikipedia images for a Peru destination (server-side proxy to avoid CORS).
+
+    Returns: {plaza, top, extras[]} each with {title, data: 'data:image/...;base64,...'}.
+    """
+    key = destination.lower().strip()
+    info = _DEST_IMG_MAP.get(key, {
+        "plaza": f"{destination} Peru",
+        "top": destination,
+        "extra": [f"{destination} Peru tourism"],
+    })
+
+    async with httpx.AsyncClient(headers=_IMG_HEADERS, follow_redirects=True) as client:
+        plaza_img, top_img = await asyncio.gather(
+            _wiki_image(client, info["plaza"]),
+            _wiki_image(client, info["top"]),
+        )
+        extras: list[dict] = []
+        for page in info.get("extra", [])[:2]:
+            img = await _wiki_image(client, page)
+            if img:
+                extras.append(img)
+
+    return {"plaza": plaza_img, "top": top_img, "extras": extras}
 
 
 @app.post(

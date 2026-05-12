@@ -129,63 +129,34 @@ function safeName(s) {
   return (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')
 }
 
-// ── Wikimedia image fetcher ────────────────────────────────────────────────────
-const DEST_WIKI = {
-  'cusco':            ['Cusco', 'Machu Picchu', 'Sacsayhuaman'],
-  'machu picchu':     ['Machu Picchu', 'Inca Trail Peru'],
-  'lima':             ['Lima Peru', 'Miraflores District Lima', 'Barranco Lima'],
-  'arequipa':         ['Arequipa', 'Colca Canyon', 'Monastery of Santa Catalina Arequipa'],
-  'puno':             ['Puno Peru', 'Lake Titicaca', 'Uros Floating Islands'],
-  'trujillo':         ['Trujillo Peru', 'Chan Chan', 'Huaca del Sol Luna'],
-  'iquitos':          ['Iquitos', 'Amazon rainforest Peru'],
-  'huaraz':           ['Huaraz', 'Huascaran National Park'],
-  'paracas':          ['Paracas National Reserve', 'Ballestas Islands'],
-  'nazca':            ['Nazca Lines', 'Nazca Peru'],
-  'chiclayo':         ['Chiclayo', 'Huaca Rajada', 'Royal Tombs of Sipan'],
-  'ayacucho':         ['Ayacucho Peru', 'Temple of Huari'],
-  'tarapoto':         ['Tarapoto', 'Laguna Azul Peru'],
-  'cajamarca':        ['Cajamarca Peru', 'Cumbe Mayo'],
-  'tacna':            ['Tacna Peru'],
-  'piura':            ['Piura Peru', 'Mancora'],
-}
-
-async function fetchWikiImage(pageTitle) {
+// ── Backend image fetcher (server-side proxy, no CORS issues) ─────────────────
+async function fetchBackendImages(destCity, apiFetch) {
+  if (!destCity) return { plaza: null, top: null, extras: [] }
   try {
-    const url = `https://en.wikipedia.org/w/api.php?action=query&titles=${encodeURIComponent(pageTitle)}&prop=pageimages&format=json&pithumbsize=320&origin=*`
-    const data = await fetch(url).then(r => r.json())
-    const page = Object.values(data?.query?.pages ?? {})[0]
-    const src = page?.thumbnail?.source
-    if (!src) return null
-    const blob = await fetch(src).then(r => r.blob())
-    return await new Promise(resolve => {
-      const rd = new FileReader()
-      rd.onload  = () => resolve(rd.result)
-      rd.onerror = () => resolve(null)
-      rd.readAsDataURL(blob)
-    })
-  } catch { return null }
+    const res = await apiFetch(`/images/${encodeURIComponent(destCity.toLowerCase())}`)
+    if (!res.ok) return { plaza: null, top: null, extras: [] }
+    return await res.json()
+  } catch { return { plaza: null, top: null, extras: [] } }
 }
 
-async function fetchDestImages(destCity, limit = 2) {
-  if (!destCity) return []
-  const key = destCity.toLowerCase()
-  const pages = (DEST_WIKI[key] ?? [`${destCity} Peru`]).slice(0, limit)
-  const results = await Promise.all(pages.map(async p => {
-    const b64 = await fetchWikiImage(p)
-    return b64 ? { title: p, b64 } : null
-  }))
-  return results.filter(Boolean)
-}
-
-// ── OSRM route helper ─────────────────────────────────────────────────────────
+// ── Route helpers ─────────────────────────────────────────────────────────────
 const MANEUVER_ES = {
   depart: 'Partir desde', arrive: 'Llegar al destino',
   turn: { left: 'Girar a la izquierda', right: 'Girar a la derecha',
-          'slight left': 'Girar levemente a la izquierda', 'slight right': 'Girar levemente a la derecha',
-          'sharp left': 'Giro brusco a la izquierda', 'sharp right': 'Giro brusco a la derecha',
-          uturn: 'Dar la vuelta' },
-  continue: 'Continuar recto por', 'new name': 'Continuar por',
+          'slight left': 'Doblar levemente a la izquierda', 'slight right': 'Doblar levemente a la derecha',
+          uturn: 'Dar la vuelta completa' },
+  continue: 'Continuar por', 'new name': 'Continuar por',
   merge: 'Incorporarse a', roundabout: 'Tomar la rotonda', 'exit roundabout': 'Salir de la rotonda',
+}
+
+const TOP_ATTRACTION = {
+  'cusco': 'Machu Picchu', 'lima': 'Larco Museum', 'arequipa': 'Colca Canyon',
+  'puno': 'Lake Titicaca', 'trujillo': 'Chan Chan', 'huaraz': 'Huascaran National Park',
+  'iquitos': 'Amazon River', 'paracas': 'Ballestas Islands',
+  'nazca': 'Nazca Lines', 'chiclayo': 'Huaca Rajada',
+  'ayacucho': 'Wari Ruins', 'tarapoto': 'Ahuashiyacu Waterfall',
+  'cajamarca': 'Cumbe Mayo', 'machu picchu': 'Machu Picchu',
+  'huancayo': 'Mantaro Valley', 'ica': 'Huacachina',
 }
 
 async function fetchRoute(fromQ, toQ) {
@@ -198,33 +169,72 @@ async function fetchRoute(fromQ, toQ) {
     if (!r1?.[0] || !r2?.[0]) return null
     const { lon: lon1, lat: lat1 } = r1[0]
     const { lon: lon2, lat: lat2 } = r2[0]
-    const osrm = `https://router.project-osrm.org/route/v1/foot/${lon1},${lat1};${lon2},${lat2}?steps=true&overview=false`
-    const rData = await fetch(osrm).then(r => r.json())
-    if (rData.code !== 'Ok') return null
-    const route = rData.routes[0]
-    const steps = route.legs[0].steps.slice(0, 10)
-    return {
-      distance: Math.round(route.distance),
-      duration: Math.round(route.duration / 60),
-      steps: steps.map(s => {
-        const { type, modifier } = s.maneuver
-        let instr = MANEUVER_ES[type] ?? 'Continuar'
-        if (typeof instr === 'object') instr = instr[modifier] ?? 'Continuar'
-        const name = s.name && s.name !== '' ? ` ${s.name}` : ''
-        if (!['depart','arrive'].includes(type) && name) instr += name
-        return { instr, dist: Math.round(s.distance) }
-      }),
+    // Fetch both walking and driving routes simultaneously
+    const [footData, driveData] = await Promise.all([
+      fetch(`https://router.project-osrm.org/route/v1/foot/${lon1},${lat1};${lon2},${lat2}?steps=true&overview=false`).then(r => r.json()),
+      fetch(`https://router.project-osrm.org/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?steps=false&overview=false`).then(r => r.json()),
+    ])
+    const parseSteps = (data) => {
+      if (data.code !== 'Ok') return null
+      const route = data.routes[0]
+      const steps = (route.legs[0].steps || []).slice(0, 8)
+      return {
+        distance: Math.round(route.distance),
+        duration: Math.round(route.duration / 60),
+        steps: steps.map(s => {
+          const { type, modifier } = s.maneuver
+          let instr = MANEUVER_ES[type] ?? 'Continuar'
+          if (typeof instr === 'object') instr = instr[modifier] ?? 'Continuar'
+          const name = s.name?.trim()
+          if (!['depart','arrive'].includes(type) && name) instr += ` ${name}`
+          return { instr, dist: Math.round(s.distance) }
+        }),
+      }
     }
+    return { walk: parseSteps(footData), drive: parseSteps(driveData) }
   } catch { return null }
 }
 
-const TOP_ATTRACTION = {
-  'cusco': 'Machu Picchu Cusco', 'lima': 'Larco Museum Lima', 'arequipa': 'Santa Catalina Monastery Arequipa',
-  'puno': 'Lake Titicaca Puno', 'trujillo': 'Chan Chan Trujillo', 'huaraz': 'Huascaran Huaraz',
-  'iquitos': 'Amazon River Iquitos', 'paracas': 'Ballestas Islands Paracas',
-  'nazca': 'Nazca Lines Nazca', 'chiclayo': 'Huaca Rajada Chiclayo',
-  'ayacucho': 'Wari Ruins Ayacucho', 'tarapoto': 'Laguna Azul Tarapoto',
-  'cajamarca': 'Cumbe Mayo Cajamarca', 'machu picchu': 'Machu Picchu',
+// ── jsPDF route map diagram ───────────────────────────────────────────────────
+function drawRouteMapDiagram(doc, x, y, w, h, fromLabel, toLabel) {
+  // Map background (OSM-like beige)
+  doc.setFillColor(242, 239, 233); doc.rect(x, y, w, h, 'F')
+  // Road grid (white lines)
+  doc.setDrawColor(255, 255, 255); doc.setLineWidth(1.8)
+  for (let i = 1; i <= 3; i++) doc.line(x, y + (h / 4) * i, x + w, y + (h / 4) * i)
+  for (let i = 1; i <= 5; i++) doc.line(x + (w / 6) * i, y, x + (w / 6) * i, y + h)
+  // Block buildings (decorative)
+  doc.setFillColor(226, 222, 215)
+  doc.rect(x + 8, y + 10, 20, 16, 'F')
+  doc.rect(x + w - 30, y + 10, 20, 16, 'F')
+  doc.rect(x + 8, y + h - 28, 20, 16, 'F')
+  doc.rect(x + w - 30, y + h - 28, 20, 16, 'F')
+  // Route arc (blue, parabolic)
+  const ax = x + 30; const ay = y + h / 2
+  const bx = x + w - 30; const by = y + h / 2
+  doc.setDrawColor(21, 101, 160); doc.setLineWidth(2.8)
+  const N = 24
+  let px = ax, py = ay
+  for (let i = 1; i <= N; i++) {
+    const t = i / N
+    const nx = ax + t * (bx - ax)
+    const ny = ay - 4 * t * (1 - t) * Math.min(28, h * 0.38)
+    doc.line(px, py, nx, ny); px = nx; py = ny
+  }
+  // Markers
+  doc.setFillColor(21, 101, 160); doc.circle(ax, ay, 8, 'F')
+  doc.setFillColor(220, 38, 38); doc.circle(bx, by, 8, 'F')
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(255, 255, 255)
+  doc.text('A', ax, ay + 2.5, { align: 'center' })
+  doc.text('B', bx, by + 2.5, { align: 'center' })
+  // Labels
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(6); doc.setTextColor(15, 25, 65)
+  const fLines = doc.splitTextToSize(fromLabel, 52); doc.text(fLines, ax, ay + 16, { align: 'center' })
+  const tLines = doc.splitTextToSize(toLabel, 52);  doc.text(tLines, bx, by + 16, { align: 'center' })
+  // Border + attribution
+  doc.setDrawColor(180, 170, 155); doc.setLineWidth(0.5); doc.rect(x, y, w, h, 'S')
+  doc.setFont('helvetica', 'italic'); doc.setFontSize(5); doc.setTextColor(150, 140, 130)
+  doc.text('Esquema referencial | Clic en botones para ruta real', x + w / 2, y + h - 4, { align: 'center' })
 }
 
 function renderBlocks(doc, blocks, x, y, w, secHc, secRc, pageH, M) {
@@ -306,7 +316,7 @@ function renderBlocks(doc, blocks, x, y, w, secHc, secRc, pageH, M) {
 }
 
 // ── PDF export ────────────────────────────────────────────────────────────────
-async function exportPDF(messages, userEmail, userCity = '') {
+async function exportPDF(messages, userEmail, userCity = '', apiFetch = null) {
   const { jsPDF } = await import('jspdf')
   const doc   = new jsPDF({ unit: 'pt', format: 'a4' })
   const pageW = doc.internal.pageSize.getWidth()
@@ -327,8 +337,9 @@ async function exportPDF(messages, userEmail, userCity = '') {
     ? `Detalle_viaje_${safeName(originCity)}_${safeName(destCity)}_${dateTag}.pdf`
     : `Detalle_viaje_Peru_${dateTag}.pdf`
 
-  // ── Pre-fetch images for LUGARES section ─────────────────────────────────
-  const destImages = await fetchDestImages(destCity, 2)
+  // ── Pre-fetch images from backend (server-side, no CORS) ─────────────────
+  const imgData = apiFetch ? await fetchBackendImages(destCity, apiFetch) : { plaza: null, top: null, extras: [] }
+  const allImgs = [imgData.plaza, imgData.top, ...imgData.extras].filter(Boolean)
 
   // ── PORTADA ──────────────────────────────────────────────────────────────
   // Azul suave — cabecera principal
@@ -472,89 +483,107 @@ async function exportPDF(messages, userEmail, userCity = '') {
       y += 14
     }
 
-    // ── Fotos de destino (solo en LUGARES) ──────────────────────────────────
-    if (sec.title.includes('LUGARES') && destImages.length > 0) {
-      const imgW = Math.floor((CW - 8) / destImages.length)
-      const imgH = Math.round(imgW * 0.625) // 16:10 ratio
-      if (y + imgH + 28 > pageH - M) { doc.addPage(); y = M }
+    // ── Galería fotográfica del destino (solo en LUGARES, mín 3 fotos) ──────
+    if (sec.title.includes('LUGARES') && allImgs.length > 0) {
+      const cols = Math.min(allImgs.length, 3)
+      const imgW = Math.floor((CW - (cols - 1) * 6) / cols)
+      const imgH = Math.round(imgW * 0.65)
+      const galH = imgH + 28
+      if (y + galH > pageH - M) { doc.addPage(); y = M }
       doc.setFillColor(245, 243, 255)
-      doc.rect(M, y, CW, imgH + 24, 'F')
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5)
-      doc.setTextColor(109, 40, 217)
-      doc.text('GALERIA DEL DESTINO', M + 6, y + 12)
-      y += 18
-      for (let di = 0; di < destImages.length; di++) {
+      doc.rect(M, y, CW, galH, 'F')
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(109, 40, 217)
+      doc.text('GALERIA FOTOGRAFICA DEL DESTINO', M + 6, y + 11)
+      y += 16
+      for (let di = 0; di < cols; di++) {
+        const img = allImgs[di]
         try {
-          const fmt = destImages[di].b64.includes('image/png') ? 'PNG' : 'JPEG'
-          doc.addImage(destImages[di].b64, fmt, M + di * (imgW + 4), y, imgW, imgH)
-          doc.setFont('helvetica', 'italic'); doc.setFontSize(6.5); doc.setTextColor(100, 80, 150)
-          const cap = normalizePDF(destImages[di].title)
-          doc.text(cap, M + di * (imgW + 4) + 2, y + imgH + 7)
+          const fmt = img.data.includes('image/png') ? 'PNG' : 'JPEG'
+          const ix = M + di * (imgW + 6)
+          doc.addImage(img.data, fmt, ix, y, imgW, imgH)
+          doc.setFont('helvetica', 'italic'); doc.setFontSize(6); doc.setTextColor(90, 70, 130)
+          doc.text(normalizePDF(img.title), ix + imgW / 2, y + imgH + 6, { align: 'center', maxWidth: imgW })
         } catch {}
       }
-      y += imgH + 18
+      y += imgH + 14
     }
 
     y += 18
   }
 
-  // ── Ruta al lugar más importante ──────────────────────────────────────────
+  // ── Sección de ruta visual ────────────────────────────────────────────────
   if (destCity) {
-    const destKey = destCity.toLowerCase()
-    const topAttr = TOP_ATTRACTION[destKey]
+    const destKey  = destCity.toLowerCase()
+    const topAttr  = TOP_ATTRACTION[destKey]
     if (topAttr) {
-      const fromQ = `Plaza de Armas ${destCity} Peru`
-      const routeData = await fetchRoute(fromQ, topAttr + ' Peru')
-      if (y + 80 > pageH - M) { doc.addPage(); y = M }
-      doc.setFillColor(15, 35, 80)
-      doc.rect(M, y, CW, 24, 'F')
-      doc.setTextColor(232, 184, 75)
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
-      const topName = normalizePDF(topAttr.replace(/ Peru$/, '').replace(/ Cusco$/, '').replace(new RegExp(` ${destCity}$`, 'i'), ''))
+      const fromQ   = `Plaza de Armas ${destCity} Peru`
+      const toQ     = `${topAttr} ${destCity} Peru`
+      const topName = normalizePDF(topAttr)
+
+      // Header
+      if (y + 200 > pageH - M) { doc.addPage(); y = M }
+      doc.setFillColor(15, 35, 80); doc.rect(M, y, CW, 24, 'F')
+      doc.setTextColor(232, 184, 75); doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
       doc.text(`COMO LLEGAR: Plaza de Armas => ${topName}`, M + 8, y + 16)
       y += 24
 
-      if (routeData) {
-        doc.setFillColor(248, 250, 252)
-        const stepsContent = routeData.steps.filter(s => s.dist > 0 || ['depart','arrive'].some(t => s.instr.includes(MANEUVER_ES[t])))
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5)
-        const distText = `Distancia total: ${routeData.distance}m  |  Tiempo caminando: ~${routeData.duration} min`
-        const distH = 20
-        if (y + distH > pageH - M) { doc.addPage(); y = M }
-        doc.setFillColor(235, 244, 255)
-        doc.rect(M, y, CW, distH, 'F')
-        doc.setTextColor(21, 101, 160); doc.setFont('helvetica', 'bold'); doc.setFontSize(8)
-        doc.text(distText, M + 8, y + 13)
-        y += distH + 4
+      // Fetch routes (walking + driving)
+      const routes = await fetchRoute(fromQ, toQ)
+      const walk  = routes?.walk
+      const drive = routes?.drive
 
-        let stepNum = 1
-        for (const step of stepsContent.slice(0, 8)) {
-          const stepTxt = `${stepNum}. ${normalizePDF(step.instr)}${step.dist > 0 ? ' (' + step.dist + 'm)' : ''}`
-          doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5)
-          const lines = doc.splitTextToSize(stepTxt, CW - 16)
-          const sH = lines.length * 10 + 6
-          if (y + sH > pageH - M) { doc.addPage(); y = M }
-          doc.setFillColor(stepNum % 2 === 0 ? 248 : 255, stepNum % 2 === 0 ? 250 : 255, stepNum % 2 === 0 ? 252 : 255)
-          doc.rect(M, y, CW, sH, 'F')
-          doc.setTextColor(25, 35, 65)
-          doc.text(lines, M + 8, y + 10)
-          y += sH
-          stepNum++
-        }
-        y += 8
-      } else {
-        // Fallback: Google Maps link
-        const gmUrl = `https://maps.google.com/?q=${encodeURIComponent(topAttr + ' ' + destCity + ' Peru')}&saddr=${encodeURIComponent('Plaza de Armas ' + destCity + ' Peru')}`
-        if (y + 30 > pageH - M) { doc.addPage(); y = M }
-        doc.setFillColor(235, 244, 255)
-        doc.rect(M, y, CW, 28, 'F')
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(21, 101, 160)
-        doc.text('Ver ruta en Google Maps:', M + 8, y + 12)
-        doc.setFontSize(7)
-        const urlLines = doc.splitTextToSize(gmUrl, CW - 16)
-        doc.text(urlLines, M + 8, y + 22)
-        y += 32
+      // Google Maps URLs
+      const gmBase  = 'https://www.google.com/maps/dir/?api=1'
+      const gmFrom  = encodeURIComponent(fromQ)
+      const gmTo    = encodeURIComponent(toQ)
+      const walkUrl = `${gmBase}&origin=${gmFrom}&destination=${gmTo}&travelmode=walking`
+      const driveUrl= `${gmBase}&origin=${gmFrom}&destination=${gmTo}&travelmode=driving`
+
+      // Distance/time info bar
+      const infoH = 20; doc.setFillColor(235, 244, 255); doc.rect(M, y, CW, infoH, 'F')
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(21, 101, 160)
+      const walkInfo  = walk  ? `A pie: ~${walk.duration} min (${walk.distance}m)` : 'A pie: ver Google Maps'
+      const driveInfo = drive ? `Vehiculo: ~${drive.duration} min (${Math.round(drive.distance/1000*10)/10}km)` : 'Vehiculo: ver Google Maps'
+      doc.text(`${walkInfo}   |   ${driveInfo}`, M + 8, y + 13)
+      y += infoH + 6
+
+      // Two-column: map diagram | step-by-step text
+      const mapW  = Math.floor(CW * 0.48)
+      const stW   = CW - mapW - 8
+      const stX   = M + mapW + 8
+      const mapH  = 118
+      drawRouteMapDiagram(doc, M, y, mapW, mapH, 'Plaza de Armas', topName)
+
+      // Steps column
+      const steps = walk?.steps ?? []
+      let sy = y + 2
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(15, 25, 65)
+      doc.text('Pasos a pie:', stX, sy + 8); sy += 14
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(30, 40, 70)
+      let stepNum = 1
+      for (const step of steps.filter(s => s.dist > 0).slice(0, 7)) {
+        const txt = `${stepNum}. ${normalizePDF(step.instr)}${step.dist > 5 ? ` (${step.dist}m)` : ''}`
+        const ll  = doc.splitTextToSize(txt, stW - 4)
+        const sH  = ll.length * 9 + 2
+        if (sy + sH > y + mapH) break
+        doc.text(ll, stX, sy); sy += sH
+        stepNum++
       }
+      y += mapH + 10
+
+      // Clickable Google Maps buttons (two columns)
+      const btnH = 22; const btnW = Math.floor((CW - 6) / 2)
+      if (y + btnH > pageH - M) { doc.addPage(); y = M }
+
+      doc.setFillColor(21, 101, 160); doc.rect(M, y, btnW, btnH, 'F')
+      doc.setTextColor(255, 255, 255); doc.setFont('helvetica', 'bold'); doc.setFontSize(8)
+      doc.text('Ruta a pie en Google Maps ->', M + 8, y + 14)
+      doc.link(M, y, btnW, btnH, { url: walkUrl })
+
+      doc.setFillColor(180, 83, 9); doc.rect(M + btnW + 6, y, btnW, btnH, 'F')
+      doc.text('Ruta en vehiculo en Google Maps ->', M + btnW + 14, y + 14)
+      doc.link(M + btnW + 6, y, btnW, btnH, { url: driveUrl })
+      y += btnH + 16
     }
   }
 
@@ -661,6 +690,32 @@ async function exportPDFSummary(messages, userEmail, chatId, apiFetch, cachedSum
   doc.setFontSize(9)
   doc.text(`DESTINO: ${destino}`, M + 8, y + 15)
   y += 28
+
+  // ── Imágenes obligatorias: Plaza de Armas + Lugar Top ────────────────────
+  const sumImgData = await fetchBackendImages(destCity || (s.destino !== nd ? s.destino : ''), apiFetch)
+  const imgPlaza = sumImgData.plaza
+  const imgTop   = sumImgData.top
+  if (imgPlaza || imgTop) {
+    const iH   = 96
+    const iW   = Math.floor((CW - 8) / 2)
+    br(iH + 28)
+    doc.setFillColor(20, 35, 80); doc.rect(M, y, CW, 14, 'F')
+    doc.setTextColor(232, 184, 75); doc.setFont('helvetica', 'bold'); doc.setFontSize(7)
+    doc.text('IMAGENES DEL DESTINO', M + 6, y + 10)
+    y += 14
+    const drawSumImg = (img, ix) => {
+      if (!img?.data) return
+      try {
+        const fmt = img.data.includes('image/png') ? 'PNG' : 'JPEG'
+        doc.addImage(img.data, fmt, ix, y, iW, iH)
+        doc.setFont('helvetica', 'italic'); doc.setFontSize(6); doc.setTextColor(100, 100, 130)
+        doc.text(normalizePDF(img.title), ix + iW / 2, y + iH + 7, { align: 'center', maxWidth: iW })
+      } catch {}
+    }
+    drawSumImg(imgPlaza, M)
+    drawSumImg(imgTop,   M + iW + 8)
+    y += iH + 14
+  }
 
   // ── Two-column: Clima | Lugares ───────────────────────────────────────────
   const GAP  = 8
@@ -967,7 +1022,27 @@ export default function Chat() {
       }
 
       const data = await res.json()
-      setMessages(prev => [...prev, { role: 'assistant', content: data.reply, usedSearch: data.used_search }])
+      const msgId = Date.now() + Math.random()
+      const msgDestCity = extractDestCity([{ content: data.reply }])
+      setMessages(prev => [...prev, {
+        id: msgId,
+        role: 'assistant',
+        content: data.reply,
+        usedSearch: data.used_search,
+        images: null,
+      }])
+
+      // Fetch destination images in background (shown below message)
+      if (msgDestCity) {
+        apiFetch(`/images/${encodeURIComponent(msgDestCity.toLowerCase())}`)
+          .then(r => r.ok ? r.json() : null)
+          .then(imgJson => {
+            if (imgJson) {
+              setMessages(prev => prev.map(m => m.id === msgId ? { ...m, images: imgJson } : m))
+            }
+          })
+          .catch(() => {})
+      }
 
       // Pre-generate summary in background so PDF export is instant
       const bgChatId = chatId
@@ -1097,7 +1172,7 @@ export default function Chat() {
             {/* PDF buttons — only when there are messages */}
             {activeTab === 'chat' && messages.length > 0 && (
               <>
-                <button className="btn-header" onClick={() => exportPDF(messages, email, userCity)} title="Reporte detallado PDF">
+                <button className="btn-header" onClick={() => exportPDF(messages, email, userCity, apiFetch)} title="Reporte detallado PDF">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
                        stroke="currentColor" strokeWidth="2.2">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -1215,7 +1290,7 @@ export default function Chat() {
                 </div>
               )}
 
-              {messages.map((msg, i) => <MessageBubble key={i} {...msg} />)}
+              {messages.map((msg, i) => <MessageBubble key={msg.id ?? i} {...msg} />)}
 
               {typing && (
                 <div className="typing-row">

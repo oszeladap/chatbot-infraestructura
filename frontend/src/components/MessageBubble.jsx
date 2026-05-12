@@ -158,7 +158,7 @@ function parseMarkdown(text) {
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function MessageBubble({ role, content, usedSearch = false, isError = false }) {
+export default function MessageBubble({ role, content, usedSearch = false, isError = false, images = null }) {
   const time    = new Date().toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })
   const isUser  = role === 'user'
   const section = useMemo(
@@ -173,6 +173,11 @@ export default function MessageBubble({ role, content, usedSearch = false, isErr
   const bubbleStyle = (section && !isError && !isUser)
     ? { background: section.bg, borderColor: section.color }
     : {}
+
+  // Build image list: plaza first, then top, then extras (max 3)
+  const imgList = images
+    ? [images.plaza, images.top, ...(images.extras ?? [])].filter(Boolean).slice(0, 3)
+    : []
 
   return (
     <div className={`bubble-row ${role}`}>
@@ -191,6 +196,18 @@ export default function MessageBubble({ role, content, usedSearch = false, isErr
           : <div className="bubble-md">{parsed}</div>
         }
       </div>
+
+      {/* Destination image gallery (assistant only) */}
+      {!isUser && !isError && imgList.length > 0 && (
+        <div className="bubble-img-gallery">
+          {imgList.map((img, i) => (
+            <div key={i} className="bubble-img-item">
+              <img src={img.data} alt={img.title} className="bubble-img" loading="lazy" />
+              <span className="bubble-img-cap">{img.title}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="bubble-meta">
         <span>{time}</span>
