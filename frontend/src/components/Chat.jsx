@@ -117,10 +117,48 @@ const PERU_CITY_LIST = [
   'nazca','pucallpa','sullana','huanuco','abancay',
 ]
 
+function titleCaseCity(city) {
+  return city.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
+}
+
 function extractDestCity(messages) {
-  const text = messages.map(m => m.content ?? '').join(' ').toLowerCase()
+  // Step 1: explicit destination patterns in user messages
+  const userText = messages
+    .filter(m => m.role === 'user')
+    .map(m => (m.content ?? '').toLowerCase())
+    .join(' ')
+  const destPats = [
+    /(?:viajar?|ir|voy|quiero\s+(?:ir|visitar))\s+(?:a|hacia|para)\s+([\w\s]{3,30})/,
+    /viaje\s+(?:a|hacia|para)\s+([\w\s]{3,25})/,
+    /destino[:\s]+([\w\s]{3,20})/,
+    /(?:visitar|conocer|recorrer)\s+([\w\s]{3,25})/,
+  ]
+  for (const pat of destPats) {
+    const m = userText.match(pat)
+    if (m) {
+      const fragment = m[1].trim()
+      const found = PERU_CITY_LIST.find(c => fragment.startsWith(c) || fragment.includes(c))
+      if (found) return titleCaseCity(found)
+    }
+  }
+
+  // Step 2: most-mentioned city in assistant responses (topic of discussion = destination)
+  const asstText = messages
+    .filter(m => m.role === 'assistant')
+    .map(m => (m.content ?? '').toLowerCase())
+    .join(' ')
+  let topCity = '', topCount = 0
   for (const city of PERU_CITY_LIST) {
-    if (text.includes(city)) return city.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
+    const re = new RegExp(`\\b${city.replace(/\s+/g, '[\\s-]+')}\\b`, 'g')
+    const count = (asstText.match(re) || []).length
+    if (count > topCount) { topCount = count; topCity = city }
+  }
+  if (topCity && topCount >= 2) return titleCaseCity(topCity)
+
+  // Step 3: fallback — first city found anywhere in text
+  const allText = messages.map(m => (m.content ?? '').toLowerCase()).join(' ')
+  for (const city of PERU_CITY_LIST) {
+    if (allText.includes(city)) return titleCaseCity(city)
   }
   return ''
 }
@@ -483,29 +521,34 @@ async function exportPDF(messages, userEmail, userCity = '', apiFetch = null) {
       y += 14
     }
 
-    // ── Galería fotográfica del destino (solo en LUGARES, mín 3 fotos) ──────
+    // ── Galería fotográfica del destino (solo en LUGARES, mín 4 fotos en 2×2) ──
     if (sec.title.includes('LUGARES') && allImgs.length > 0) {
-      const cols = Math.min(allImgs.length, 3)
-      const imgW = Math.floor((CW - (cols - 1) * 6) / cols)
-      const imgH = Math.round(imgW * 0.65)
-      const galH = imgH + 28
+      const showImgs = allImgs.slice(0, 4)
+      const COLS = 2
+      const imgW = Math.floor((CW - 8) / COLS)
+      const imgH = Math.round(imgW * 0.58)
+      const numRows = Math.ceil(showImgs.length / COLS)
+      const galH = 18 + numRows * (imgH + 16) + 4
       if (y + galH > pageH - M) { doc.addPage(); y = M }
+      const galStartY = y
       doc.setFillColor(245, 243, 255)
-      doc.rect(M, y, CW, galH, 'F')
+      doc.rect(M, galStartY, CW, galH, 'F')
       doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(109, 40, 217)
-      doc.text('GALERIA FOTOGRAFICA DEL DESTINO', M + 6, y + 11)
-      y += 16
-      for (let di = 0; di < cols; di++) {
-        const img = allImgs[di]
+      doc.text('GALERIA FOTOGRAFICA DEL DESTINO', M + 6, galStartY + 12)
+      for (let di = 0; di < showImgs.length; di++) {
+        const img = showImgs[di]
+        const col = di % COLS
+        const row = Math.floor(di / COLS)
+        const ix = M + col * (imgW + 8)
+        const iy = galStartY + 18 + row * (imgH + 16)
         try {
           const fmt = img.data.includes('image/png') ? 'PNG' : 'JPEG'
-          const ix = M + di * (imgW + 6)
-          doc.addImage(img.data, fmt, ix, y, imgW, imgH)
+          doc.addImage(img.data, fmt, ix, iy, imgW, imgH)
           doc.setFont('helvetica', 'italic'); doc.setFontSize(6); doc.setTextColor(90, 70, 130)
-          doc.text(normalizePDF(img.title), ix + imgW / 2, y + imgH + 6, { align: 'center', maxWidth: imgW })
+          doc.text(normalizePDF(img.title), ix + imgW / 2, iy + imgH + 8, { align: 'center', maxWidth: imgW })
         } catch {}
       }
-      y += imgH + 14
+      y = galStartY + galH
     }
 
     y += 18

@@ -150,24 +150,24 @@ _IMG_HEADERS = {"User-Agent": "TravelPeru/2.1 oszeladap@gmail.com"}
 #   top   → main tourist attraction image
 #   extra → additional place images (up to 2)
 _DEST_IMG_MAP: dict[str, dict[str, Any]] = {
-    "cusco":        {"plaza": "Plaza de Armas Cusco",       "top": "Machu Picchu",                     "extra": ["Sacsayhuaman", "Qorikancha"]},
-    "machu picchu": {"plaza": "Aguas Calientes Peru",       "top": "Machu Picchu",                     "extra": ["Inca Trail Peru"]},
-    "lima":         {"plaza": "Plaza Mayor Lima",           "top": "Larco Museum",                     "extra": ["Miraflores District Lima", "Barranco Lima"]},
-    "arequipa":     {"plaza": "Plaza de Armas Arequipa",    "top": "Colca Canyon",                     "extra": ["Monastery of Santa Catalina Arequipa", "El Misti"]},
-    "puno":         {"plaza": "Puno Peru",                  "top": "Lake Titicaca",                    "extra": ["Uros people", "Sillustani"]},
-    "trujillo":     {"plaza": "Trujillo Peru",              "top": "Chan Chan",                        "extra": ["Huaca Rajada", "El Brujo"]},
-    "iquitos":      {"plaza": "Iquitos",                    "top": "Amazon River",                     "extra": ["Pilpintuwasi", "Amazon rainforest Peru"]},
-    "huaraz":       {"plaza": "Huaraz",                     "top": "Huascaran National Park",          "extra": ["Llanganuco Lakes", "Pastoruri Glacier"]},
-    "paracas":      {"plaza": "Paracas National Reserve",   "top": "Ballestas Islands",                "extra": ["Paracas Peru"]},
-    "nazca":        {"plaza": "Nazca Peru",                 "top": "Nazca Lines",                      "extra": ["Cantalloc Aqueducts Peru"]},
-    "chiclayo":     {"plaza": "Chiclayo",                   "top": "Huaca Rajada",                     "extra": ["Royal Tombs of Sipan", "Batan Grande"]},
-    "ayacucho":     {"plaza": "Ayacucho Peru",              "top": "Wari Culture Peru",                "extra": ["Quinua Battlefield", "Huanta Peru"]},
-    "cajamarca":    {"plaza": "Cajamarca Peru",             "top": "Cumbe Mayo",                       "extra": ["Ventanillas de Otuzco", "Cajamarca Region"]},
-    "tarapoto":     {"plaza": "Tarapoto",                   "top": "Amazon rainforest Peru",           "extra": ["Ahuashiyacu Waterfall"]},
-    "tacna":        {"plaza": "Tacna Peru",                 "top": "Tacna Cathedral",                  "extra": ["Tacna Region"]},
-    "piura":        {"plaza": "Piura Peru",                 "top": "Mancora Peru",                     "extra": ["Piura Region"]},
-    "huancayo":     {"plaza": "Huancayo",                   "top": "Mantaro Valley",                   "extra": ["Huancayo Cathedral"]},
-    "ica":          {"plaza": "Ica Peru",                   "top": "Huacachina",                       "extra": ["Ica Region Peru"]},
+    "cusco":        {"plaza": "Plaza de Armas Cusco",       "top": "Machu Picchu",           "extra": ["Sacsayhuaman", "Qorikancha", "Pisac", "Ollantaytambo"]},
+    "machu picchu": {"plaza": "Aguas Calientes Peru",       "top": "Machu Picchu",           "extra": ["Inca Trail Peru", "Huayna Picchu", "Sun Gate Machu Picchu", "Ollantaytambo"]},
+    "lima":         {"plaza": "Plaza Mayor Lima",           "top": "Larco Museum",           "extra": ["Miraflores District Lima", "Barranco Lima", "Pachacamac", "Chorrillos"]},
+    "arequipa":     {"plaza": "Plaza de Armas Arequipa",    "top": "Colca Canyon",           "extra": ["Monastery of Santa Catalina Arequipa", "El Misti", "Yanahuara", "Toro Muerto petroglyphs"]},
+    "puno":         {"plaza": "Puno Peru",                  "top": "Lake Titicaca",          "extra": ["Uros people", "Sillustani", "Amantani", "Taquile"]},
+    "trujillo":     {"plaza": "Trujillo Peru",              "top": "Chan Chan",              "extra": ["Huaca Rajada", "El Brujo", "Huaca del Sol", "Moche culture"]},
+    "iquitos":      {"plaza": "Iquitos",                    "top": "Amazon River",           "extra": ["Pilpintuwasi", "Amazon rainforest Peru", "Nauta Peru", "Pacaya-Samiria"]},
+    "huaraz":       {"plaza": "Huaraz",                     "top": "Huascaran National Park","extra": ["Llanganuco Lakes", "Pastoruri Glacier", "Chavin de Huantar", "Laguna Churup"]},
+    "paracas":      {"plaza": "Paracas National Reserve",   "top": "Ballestas Islands",      "extra": ["Paracas Peru", "Ica Region Peru", "Pisco Peru", "Huacachina"]},
+    "nazca":        {"plaza": "Nazca Peru",                 "top": "Nazca Lines",            "extra": ["Cantalloc Aqueducts Peru", "Maria Reiche", "Palpa Peru", "Cahuachi"]},
+    "chiclayo":     {"plaza": "Chiclayo",                   "top": "Huaca Rajada",           "extra": ["Royal Tombs of Sipan", "Batan Grande", "Lambayeque Peru", "Tucume"]},
+    "ayacucho":     {"plaza": "Ayacucho Peru",              "top": "Wari Culture Peru",      "extra": ["Quinua Battlefield", "Huanta Peru", "Vilcashuaman", "Ayacucho Cathedral"]},
+    "cajamarca":    {"plaza": "Cajamarca Peru",             "top": "Cumbe Mayo",             "extra": ["Ventanillas de Otuzco", "Cajamarca Region", "Banos del Inca", "Porcon Peru"]},
+    "tarapoto":     {"plaza": "Tarapoto",                   "top": "Amazon rainforest Peru", "extra": ["Ahuashiyacu Waterfall", "Sauce Peru", "San Martin Region Peru", "Lamas Peru"]},
+    "tacna":        {"plaza": "Tacna Peru",                 "top": "Tacna Cathedral",        "extra": ["Tacna Region", "Toquepala Peru", "Laguna Aricota"]},
+    "piura":        {"plaza": "Piura Peru",                 "top": "Mancora Peru",           "extra": ["Piura Region", "Catacaos", "Vichayito", "Colán Peru"]},
+    "huancayo":     {"plaza": "Huancayo",                   "top": "Mantaro Valley",         "extra": ["Huancayo Cathedral", "Junin Region Peru", "Jauja Peru", "Concepcion Peru"]},
+    "ica":          {"plaza": "Ica Peru",                   "top": "Huacachina",             "extra": ["Ica Region Peru", "Chincha Peru", "Palpa Peru", "Tambo Colorado"]},
 }
 
 
@@ -226,7 +226,7 @@ async def get_destination_images(destination: str) -> dict:
             _wiki_image(client, info["top"]),
         )
         extras: list[dict] = []
-        for page in info.get("extra", [])[:2]:
+        for page in info.get("extra", [])[:4]:
             img = await _wiki_image(client, page)
             if img:
                 extras.append(img)
