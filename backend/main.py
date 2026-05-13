@@ -1,10 +1,11 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import base64
 import io
 import os
 import tempfile
+import time as _time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,7 +16,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / ".env")   # must run before any other local import
 
 # ---------------------------------------------------------------------------
-# Cloud credentials — decode GOOGLE_CREDENTIALS_JSON (base64) if present.
+# Cloud credentials â€” decode GOOGLE_CREDENTIALS_JSON (base64) if present.
 # Needed on Railway / Docker where there is no local service-account file.
 # ---------------------------------------------------------------------------
 _creds_b64 = os.environ.get("GOOGLE_CREDENTIALS_JSON", "")
@@ -43,8 +44,8 @@ from auth import (
 # ---------------------------------------------------------------------------
 
 app = FastAPI(
-    title="Chatbot Transporte Perú API",
-    description="API REST para el asistente de transporte aéreo y terrestre en Perú.",
+    title="Chatbot Transporte PerÃº API",
+    description="API REST para el asistente de transporte aÃ©reo y terrestre en PerÃº.",
     version="2.0.0",
 )
 
@@ -60,7 +61,7 @@ class _NoCacheHtmlMiddleware(BaseHTTPMiddleware):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=False,   # Bearer token, no cookies — "*" requiere False
+    allow_credentials=False,   # Bearer token, no cookies â€” "*" requiere False
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
@@ -139,245 +140,49 @@ class SummaryRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Destination images — hardcoded Wikimedia CDN URLs (verified locally, stable).
-# NO Wikipedia API calls at runtime → zero rate-limiting risk on Railway.
-# Each city has exactly 6 images: [city, top-attraction, gastro1, gastro2, site1, site2].
-# The browser loads images directly from upload.wikimedia.org (CORS: Access-Control-Allow-Origin: *).
+# Destination images - Tavily image search + server-side download.
+# Images are downloaded on the backend and returned as base64 data URLs so the
+# browser and jsPDF can use them with zero CORS restrictions.
+# Results are cached 24 h in memory to minimize Tavily API calls.
 # ---------------------------------------------------------------------------
 
-_W = "https://upload.wikimedia.org/wikipedia/commons/thumb"
-_WE = "https://upload.wikimedia.org/wikipedia/en"
+_img_cache: dict[str, tuple[dict, float]] = {}   # key -> (response, unix_timestamp)
+_IMG_CACHE_TTL = 86_400                           # 24 hours
 
-_DEST_IMGS: dict[str, list[dict]] = {
-    "cusco": [
-        {"title": "Cusco",           "url": f"{_W}/d/d7/Vista_Calle_Suecia.jpg/640px-Vista_Calle_Suecia.jpg"},
-        {"title": "Machu Picchu",    "url": f"{_W}/b/bb/Machu_Picchu%2C_2023_%28012%29.jpg/640px-Machu_Picchu%2C_2023_%28012%29.jpg"},
-        {"title": "Gastronomia andina", "url": f"{_W}/5/57/PachaComer.jpg/640px-PachaComer.jpg"},
-        {"title": "Chicharron",      "url": f"{_W}/2/26/Anticuchos_-_Grilled_Beef_Heart_skewers.jpg/640px-Anticuchos_-_Grilled_Beef_Heart_skewers.jpg"},
-        {"title": "Sacsayhuaman",    "url": f"{_W}/6/60/Sacsayhuam%C3%A1n%2C_Cusco%2C_Per%C3%BA%2C_2015-07-31%2C_DD_27.JPG/640px-Sacsayhuam%C3%A1n%2C_Cusco%2C_Per%C3%BA%2C_2015-07-31%2C_DD_27.JPG"},
-        {"title": "Qorikancha",      "url": f"{_W}/d/dd/Coricancha%2C_Cusco%2C_Per%C3%BA%2C_2015-07-31%2C_DD_68.JPG/640px-Coricancha%2C_Cusco%2C_Per%C3%BA%2C_2015-07-31%2C_DD_68.JPG"},
-    ],
-    "machu picchu": [
-        {"title": "Aguas Calientes", "url": f"{_W}/a/ac/Aguas_Calientes%2C_Cuzco%2C_Per%C3%BA%2C_2015-07-30%2C_DD_68.JPG/640px-Aguas_Calientes%2C_Cuzco%2C_Per%C3%BA%2C_2015-07-30%2C_DD_68.JPG"},
-        {"title": "Machu Picchu",    "url": f"{_W}/b/bb/Machu_Picchu%2C_2023_%28012%29.jpg/640px-Machu_Picchu%2C_2023_%28012%29.jpg"},
-        {"title": "Ceviche",         "url": f"{_W}/7/78/Cebiche_de_corvina.JPG/640px-Cebiche_de_corvina.JPG"},
-        {"title": "Anticuchos",      "url": f"{_W}/2/26/Anticuchos_-_Grilled_Beef_Heart_skewers.jpg/640px-Anticuchos_-_Grilled_Beef_Heart_skewers.jpg"},
-        {"title": "Camino Inca",     "url": f"{_W}/2/29/Incatrail_in_Peru.jpg/640px-Incatrail_in_Peru.jpg"},
-        {"title": "Ollantaytambo",   "url": f"{_W}/9/91/Ollantaytambo_-_Heiliges_Tal.jpg/640px-Ollantaytambo_-_Heiliges_Tal.jpg"},
-    ],
-    "lima": [
-        {"title": "Lima",            "url": f"{_W}/6/69/Bas%C3%ADlica_Catedral_Metropolitana_de_Lima_%28cropped%29.jpg/640px-Bas%C3%ADlica_Catedral_Metropolitana_de_Lima_%28cropped%29.jpg"},
-        {"title": "Museo Larco",     "url": f"{_W}/c/c7/Lima_museo_larco.jpg/640px-Lima_museo_larco.jpg"},
-        {"title": "Ceviche",         "url": f"{_W}/7/78/Cebiche_de_corvina.JPG/640px-Cebiche_de_corvina.JPG"},
-        {"title": "Lomo saltado",    "url": f"{_W}/8/80/Lomo_Saltado_-_Lima%2C_Peru_Miraflores_%28Tiendecita_Blanca%29.jpg/640px-Lomo_Saltado_-_Lima%2C_Peru_Miraflores_%28Tiendecita_Blanca%29.jpg"},
-        {"title": "Miraflores",      "url": f"{_W}/e/ef/Miraflores_2023.jpg/640px-Miraflores_2023.jpg"},
-        {"title": "Huaca Pucllana",  "url": f"{_W}/d/de/Huaca_Pucllana_Miraflores.jpg/640px-Huaca_Pucllana_Miraflores.jpg"},
-    ],
-    "arequipa": [
-        {"title": "Arequipa",        "url": f"{_W}/5/5f/Catedral_Arequipa%2C_Peru.jpg/640px-Catedral_Arequipa%2C_Peru.jpg"},
-        {"title": "Canon del Colca", "url": f"{_W}/1/13/Colca_Canyon_Puno.jpg/640px-Colca_Canyon_Puno.jpg"},
-        {"title": "Rocoto relleno",  "url": f"{_W}/1/17/Rocoto_relleno.jpg/640px-Rocoto_relleno.jpg"},
-        {"title": "Aji de gallina",  "url": f"{_W}/e/e1/Aj%C3%AD_de_gallina.jpg/640px-Aj%C3%AD_de_gallina.jpg"},
-        {"title": "Monasterio Santa Catalina", "url": f"{_W}/5/5c/Santa_Catalina_Monastery%2C_Arequipa_-_53032077180.jpg/640px-Santa_Catalina_Monastery%2C_Arequipa_-_53032077180.jpg"},
-        {"title": "Volcan El Misti", "url": f"{_W}/a/a3/Volcano_Misti%2C_Peru.jpg/640px-Volcano_Misti%2C_Peru.jpg"},
-    ],
-    "puno": [
-        {"title": "Puno",            "url": f"{_W}/0/00/Vista_de_Puno_y_el_Titicaca%2C_Per%C3%BA%2C_2015-08-01%2C_DD_63.JPG/640px-Vista_de_Puno_y_el_Titicaca%2C_Per%C3%BA%2C_2015-08-01%2C_DD_63.JPG"},
-        {"title": "Lago Titicaca",   "url": f"{_W}/7/73/Lake_Titicaca_ESA22522896.jpeg/640px-Lake_Titicaca_ESA22522896.jpeg"},
-        {"title": "Cocina andina",   "url": f"{_W}/5/57/PachaComer.jpg/640px-PachaComer.jpg"},
-        {"title": "Pachamanca",      "url": f"{_W}/5/57/PachaComer.jpg/640px-PachaComer.jpg"},
-        {"title": "Sillustani",      "url": f"{_W}/4/49/Sillustani%2C_Per%C3%BA%2C_2015-08-01%2C_DD_87.JPG/640px-Sillustani%2C_Per%C3%BA%2C_2015-08-01%2C_DD_87.JPG"},
-        {"title": "Isla Taquile",    "url": f"{_W}/a/a1/Taquile_from_Amantani.jpg/640px-Taquile_from_Amantani.jpg"},
-    ],
-    "trujillo": [
-        {"title": "Trujillo",        "url": f"{_W}/e/ed/Freedom_Monument%2C_Trujillo.jpg/640px-Freedom_Monument%2C_Trujillo.jpg"},
-        {"title": "Chan Chan",       "url": f"{_W}/e/e0/Chan_chan_view1.jpg/640px-Chan_chan_view1.jpg"},
-        {"title": "Ceviche",         "url": f"{_W}/7/78/Cebiche_de_corvina.JPG/640px-Cebiche_de_corvina.JPG"},
-        {"title": "Anticuchos",      "url": f"{_W}/2/26/Anticuchos_-_Grilled_Beef_Heart_skewers.jpg/640px-Anticuchos_-_Grilled_Beef_Heart_skewers.jpg"},
-        {"title": "Senor de Sipan",  "url": f"{_W}/3/3d/Se%C3%B1or_de_S%C3%ADpan_-_Reconstrucci%C3%B3n_Facial_Forense.jpg/640px-Se%C3%B1or_de_S%C3%ADpan_-_Reconstrucci%C3%B3n_Facial_Forense.jpg"},
-        {"title": "Huaca de la Luna","url": f"{_W}/2/21/Huaca_de_la_Luna_jt02.jpg/640px-Huaca_de_la_Luna_jt02.jpg"},
-    ],
-    "iquitos": [
-        {"title": "Iquitos",         "url": f"{_W}/1/1f/Plaza_de_Armas_en_Iquitos.jpg/640px-Plaza_de_Armas_en_Iquitos.jpg"},
-        {"title": "Rio Amazonas",    "url": f"{_W}/f/f8/Amazon_River_ESA387332.jpg/640px-Amazon_River_ESA387332.jpg"},
-        {"title": "Lomo saltado",    "url": f"{_W}/8/80/Lomo_Saltado_-_Lima%2C_Peru_Miraflores_%28Tiendecita_Blanca%29.jpg/640px-Lomo_Saltado_-_Lima%2C_Peru_Miraflores_%28Tiendecita_Blanca%29.jpg"},
-        {"title": "Amazonia peruana","url": f"{_W}/1/13/7_-_Itahuania_-_Ao%C3%BBt_2008.JPG/640px-7_-_Itahuania_-_Ao%C3%BBt_2008.JPG"},
-        {"title": "Selva amazonica", "url": f"{_W}/5/56/Amazon17_%285641020319%29.jpg/640px-Amazon17_%285641020319%29.jpg"},
-        {"title": "Cuenca amazonica","url": f"{_W}/0/02/Amazonriverbasin_basemap.png/640px-Amazonriverbasin_basemap.png"},
-    ],
-    "huaraz": [
-        {"title": "Huaraz",          "url": f"{_W}/2/2f/Huascaran_Huandoy_Chopicalqui_seen_from_Huaraz.JPG/640px-Huascaran_Huandoy_Chopicalqui_seen_from_Huaraz.JPG"},
-        {"title": "Nevado Huascaran","url": f"{_W}/5/59/Nevado_Huascar%C3%A1n3.jpg/640px-Nevado_Huascar%C3%A1n3.jpg"},
-        {"title": "Cocina andina",   "url": f"{_W}/5/57/PachaComer.jpg/640px-PachaComer.jpg"},
-        {"title": "Anticuchos",      "url": f"{_W}/2/26/Anticuchos_-_Grilled_Beef_Heart_skewers.jpg/640px-Anticuchos_-_Grilled_Beef_Heart_skewers.jpg"},
-        {"title": "Lagunas Llanganuco","url": f"{_W}/e/e1/Heaven%27s_Gate_Laguna_de_Chinancocha_02.jpg/640px-Heaven%27s_Gate_Laguna_de_Chinancocha_02.jpg"},
-        {"title": "Cordillera Blanca","url": f"{_W}/9/96/Beauty_of_mount_Huandoy%2C_Cordillera_Blanca%2C_Ancash%2C_Peru.jpg/640px-Beauty_of_mount_Huandoy%2C_Cordillera_Blanca%2C_Ancash%2C_Peru.jpg"},
-    ],
-    "paracas": [
-        {"title": "Reserva Paracas", "url": f"{_W}/f/f4/Paracas_National_Reserve._Ica%2C_Peru.jpg/640px-Paracas_National_Reserve._Ica%2C_Peru.jpg"},
-        {"title": "Islas Ballestas", "url": f"{_W}/0/0e/Islas_Ballestas_-_panoramio_%283%29.jpg/640px-Islas_Ballestas_-_panoramio_%283%29.jpg"},
-        {"title": "Pisco sour",      "url": f"{_W}/2/27/Pisco_sour_20100613b.JPG/640px-Pisco_sour_20100613b.JPG"},
-        {"title": "Ceviche",         "url": f"{_W}/7/78/Cebiche_de_corvina.JPG/640px-Cebiche_de_corvina.JPG"},
-        {"title": "Huacachina",      "url": f"{_W}/d/d4/Oasis_de_Huacachina%2C_Ica%2C_Per%C3%BA%2C_2015-07-29%2C_DD_18.JPG/640px-Oasis_de_Huacachina%2C_Ica%2C_Per%C3%BA%2C_2015-07-29%2C_DD_18.JPG"},
-        {"title": "Chincha Alta",    "url": f"{_W}/7/73/Chincha_Alta%2C_Ica.png/640px-Chincha_Alta%2C_Ica.png"},
-    ],
-    "nazca": [
-        {"title": "Nazca",           "url": f"{_W}/9/9a/Plaza_de_Armas%2C_Nazca_%288443289015%29.jpg/640px-Plaza_de_Armas%2C_Nazca_%288443289015%29.jpg"},
-        {"title": "Lineas de Nazca", "url": f"{_W}/f/f7/L%C3%ADneas_de_Nazca%2C_Nazca%2C_Per%C3%BA%2C_2015-07-29%2C_DD_49.JPG/640px-L%C3%ADneas_de_Nazca%2C_Nazca%2C_Per%C3%BA%2C_2015-07-29%2C_DD_49.JPG"},
-        {"title": "Ceviche",         "url": f"{_W}/7/78/Cebiche_de_corvina.JPG/640px-Cebiche_de_corvina.JPG"},
-        {"title": "Tiradito",        "url": f"{_W}/1/18/Tiradito.jpg/640px-Tiradito.jpg"},
-        {"title": "Maria Reiche",    "url": f"{_WE}/e/e1/Maria_Reiche_1986.jpg"},
-        {"title": "Tambo Colorado",  "url": f"{_W}/7/71/TamboColorado-colours.PNG/640px-TamboColorado-colours.PNG"},
-    ],
-    "chiclayo": [
-        {"title": "Chiclayo",        "url": f"{_W}/e/e5/Chiclayo-Peru3.jpg/640px-Chiclayo-Peru3.jpg"},
-        {"title": "Huaca Rajada",    "url": f"{_W}/9/93/Tomb_of_Lord_of_Sip%C3%A1n_01.jpg/640px-Tomb_of_Lord_of_Sip%C3%A1n_01.jpg"},
-        {"title": "Ceviche",         "url": f"{_W}/7/78/Cebiche_de_corvina.JPG/640px-Cebiche_de_corvina.JPG"},
-        {"title": "Anticuchos",      "url": f"{_W}/2/26/Anticuchos_-_Grilled_Beef_Heart_skewers.jpg/640px-Anticuchos_-_Grilled_Beef_Heart_skewers.jpg"},
-        {"title": "Senor de Sipan",  "url": f"{_W}/3/3d/Se%C3%B1or_de_S%C3%ADpan_-_Reconstrucci%C3%B3n_Facial_Forense.jpg/640px-Se%C3%B1or_de_S%C3%ADpan_-_Reconstrucci%C3%B3n_Facial_Forense.jpg"},
-        {"title": "Huaca de la Luna","url": f"{_W}/2/21/Huaca_de_la_Luna_jt02.jpg/640px-Huaca_de_la_Luna_jt02.jpg"},
-    ],
-    "ayacucho": [
-        {"title": "Ayacucho",        "url": f"{_W}/8/85/Catedral_de_Ayacucho_%28Catedral_Bas%C3%ADlica_de_Santa_Mar%C3%ADa%29.jpg/640px-Catedral_de_Ayacucho_%28Catedral_Bas%C3%ADlica_de_Santa_Mar%C3%ADa%29.jpg"},
-        {"title": "Imperio Wari",    "url": f"{_W}/8/8b/Map_of_Wari_and_Tiawaku.svg/640px-Map_of_Wari_and_Tiawaku.svg.png"},
-        {"title": "Cocina andina",   "url": f"{_W}/5/57/PachaComer.jpg/640px-PachaComer.jpg"},
-        {"title": "Pachamanca",      "url": f"{_W}/5/57/PachaComer.jpg/640px-PachaComer.jpg"},
-        {"title": "Batalla Ayacucho","url": f"{_W}/d/df/Batalla_de_Ayacucho_by_Mart%C3%ADn_Tovar_y_Tovar_%281827_-_1902%29.jpg/640px-Batalla_de_Ayacucho_by_Mart%C3%ADn_Tovar_y_Tovar_%281827_-_1902%29.jpg"},
-        {"title": "Ventanillas Otuzco","url": f"{_W}/5/5c/Otuzco.jpg/640px-Otuzco.jpg"},
-    ],
-    "cajamarca": [
-        {"title": "Cajamarca",       "url": f"{_W}/9/93/Catedral_de_Cajamarca_Per%C3%BA.jpg/640px-Catedral_de_Cajamarca_Per%C3%BA.jpg"},
-        {"title": "Cumbe Mayo",      "url": f"{_W}/9/9c/Cumbemayo_aqueduct.JPG/640px-Cumbemayo_aqueduct.JPG"},
-        {"title": "Cocina andina",   "url": f"{_W}/5/57/PachaComer.jpg/640px-PachaComer.jpg"},
-        {"title": "Papa a la huancaina","url": f"{_W}/7/74/Papa_a_la_huancaina.jpg/640px-Papa_a_la_huancaina.jpg"},
-        {"title": "Ventanillas Otuzco","url": f"{_W}/5/5c/Otuzco.jpg/640px-Otuzco.jpg"},
-        {"title": "Barranco Lima",   "url": f"{_W}/d/d7/Barranco_District_Lima_Peru.jpg/640px-Barranco_District_Lima_Peru.jpg"},
-    ],
-    "tarapoto": [
-        {"title": "Tarapoto",        "url": f"{_W}/a/a7/Puente_Atumpampa%2C_Tarapoto.jpg/640px-Puente_Atumpampa%2C_Tarapoto.jpg"},
-        {"title": "Selva amazonica", "url": f"{_W}/5/56/Amazon17_%285641020319%29.jpg/640px-Amazon17_%285641020319%29.jpg"},
-        {"title": "Lomo saltado",    "url": f"{_W}/8/80/Lomo_Saltado_-_Lima%2C_Peru_Miraflores_%28Tiendecita_Blanca%29.jpg/640px-Lomo_Saltado_-_Lima%2C_Peru_Miraflores_%28Tiendecita_Blanca%29.jpg"},
-        {"title": "Amazonia peruana","url": f"{_W}/1/13/7_-_Itahuania_-_Ao%C3%BBt_2008.JPG/640px-7_-_Itahuania_-_Ao%C3%BBt_2008.JPG"},
-        {"title": "Region San Martin","url": f"{_W}/2/2b/Riu_Huallaga_des_de_la_carretera_de_Sauce04.jpg/640px-Riu_Huallaga_des_de_la_carretera_de_Sauce04.jpg"},
-        {"title": "Rio Amazonas",    "url": f"{_W}/f/f8/Amazon_River_ESA387332.jpg/640px-Amazon_River_ESA387332.jpg"},
-    ],
-    "tacna": [
-        {"title": "Tacna",           "url": f"{_W}/e/e6/Catedral_Nuestra_Se%C3%B1ora_del_Rosario_de_Tacna.jpg/640px-Catedral_Nuestra_Se%C3%B1ora_del_Rosario_de_Tacna.jpg"},
-        {"title": "Catedral de Tacna","url": f"{_W}/e/e6/Catedral_Nuestra_Se%C3%B1ora_del_Rosario_de_Tacna.jpg/640px-Catedral_Nuestra_Se%C3%B1ora_del_Rosario_de_Tacna.jpg"},
-        {"title": "Ceviche",         "url": f"{_W}/7/78/Cebiche_de_corvina.JPG/640px-Cebiche_de_corvina.JPG"},
-        {"title": "Aji de gallina",  "url": f"{_W}/e/e1/Aj%C3%AD_de_gallina.jpg/640px-Aj%C3%AD_de_gallina.jpg"},
-        {"title": "Region Tacna",    "url": f"{_W}/2/2c/Tutupaca2.jpg/640px-Tutupaca2.jpg"},
-        {"title": "Volcan El Misti", "url": f"{_W}/a/a3/Volcano_Misti%2C_Peru.jpg/640px-Volcano_Misti%2C_Peru.jpg"},
-    ],
-    "piura": [
-        {"title": "Piura",           "url": f"{_W}/6/65/PLAZA_DE_ARMAS_DE_PIURA_-_PIURA.jpg/640px-PLAZA_DE_ARMAS_DE_PIURA_-_PIURA.jpg"},
-        {"title": "Playa Mancora",   "url": f"{_W}/6/65/Mancorabeach1.jpg/640px-Mancorabeach1.jpg"},
-        {"title": "Ceviche",         "url": f"{_W}/7/78/Cebiche_de_corvina.JPG/640px-Cebiche_de_corvina.JPG"},
-        {"title": "Tiradito",        "url": f"{_W}/1/18/Tiradito.jpg/640px-Tiradito.jpg"},
-        {"title": "Catacaos",        "url": f"{_W}/d/db/Iglesia_San_Juan_Bautista%2C_Catacaos_01.jpg/640px-Iglesia_San_Juan_Bautista%2C_Catacaos_01.jpg"},
-        {"title": "Huancabamba",     "url": f"{_W}/d/db/Huancabamba_aerialview.jpg/640px-Huancabamba_aerialview.jpg"},
-    ],
-    "huancayo": [
-        {"title": "Huancayo",        "url": f"{_W}/f/fd/Plaza_de_la_Constituci%C3%B3n_Huancayo.jpg/640px-Plaza_de_la_Constituci%C3%B3n_Huancayo.jpg"},
-        {"title": "Lagunas Llanganuco","url": f"{_W}/e/e1/Heaven%27s_Gate_Laguna_de_Chinancocha_02.jpg/640px-Heaven%27s_Gate_Laguna_de_Chinancocha_02.jpg"},
-        {"title": "Cocina andina",   "url": f"{_W}/5/57/PachaComer.jpg/640px-PachaComer.jpg"},
-        {"title": "Pachamanca",      "url": f"{_W}/5/57/PachaComer.jpg/640px-PachaComer.jpg"},
-        {"title": "Papa a la huancaina","url": f"{_W}/7/74/Papa_a_la_huancaina.jpg/640px-Papa_a_la_huancaina.jpg"},
-        {"title": "Cordillera Blanca","url": f"{_W}/9/96/Beauty_of_mount_Huandoy%2C_Cordillera_Blanca%2C_Ancash%2C_Peru.jpg/640px-Beauty_of_mount_Huandoy%2C_Cordillera_Blanca%2C_Ancash%2C_Peru.jpg"},
-    ],
-    "ica": [
-        {"title": "Ica",             "url": f"{_W}/4/4c/Oasis_de_Huacachina%2C_Ica%2C_Per%C3%BA%2C_2015-07-29%2C_DD_23.JPG/640px-Oasis_de_Huacachina%2C_Ica%2C_Per%C3%BA%2C_2015-07-29%2C_DD_23.JPG"},
-        {"title": "Huacachina",      "url": f"{_W}/d/d4/Oasis_de_Huacachina%2C_Ica%2C_Per%C3%BA%2C_2015-07-29%2C_DD_18.JPG/640px-Oasis_de_Huacachina%2C_Ica%2C_Per%C3%BA%2C_2015-07-29%2C_DD_18.JPG"},
-        {"title": "Pisco sour",      "url": f"{_W}/2/27/Pisco_sour_20100613b.JPG/640px-Pisco_sour_20100613b.JPG"},
-        {"title": "Tiradito",        "url": f"{_W}/1/18/Tiradito.jpg/640px-Tiradito.jpg"},
-        {"title": "Chincha Alta",    "url": f"{_W}/7/73/Chincha_Alta%2C_Ica.png/640px-Chincha_Alta%2C_Ica.png"},
-        {"title": "Tambo Colorado",  "url": f"{_W}/7/71/TamboColorado-colours.PNG/640px-TamboColorado-colours.PNG"},
-    ],
-    "puerto maldonado": [
-        {"title": "Puerto Maldonado","url": f"{_W}/7/74/Aerial_shot_of_Puerto_Maldonado.jpg/640px-Aerial_shot_of_Puerto_Maldonado.jpg"},
-        {"title": "Rio Madre de Dios","url": f"{_W}/5/56/Amazon17_%285641020319%29.jpg/640px-Amazon17_%285641020319%29.jpg"},
-        {"title": "Lomo saltado",    "url": f"{_W}/8/80/Lomo_Saltado_-_Lima%2C_Peru_Miraflores_%28Tiendecita_Blanca%29.jpg/640px-Lomo_Saltado_-_Lima%2C_Peru_Miraflores_%28Tiendecita_Blanca%29.jpg"},
-        {"title": "Selva amazonica", "url": f"{_W}/5/56/Amazon17_%285641020319%29.jpg/640px-Amazon17_%285641020319%29.jpg"},
-        {"title": "Lago Sandoval",   "url": f"{_W}/0/02/Amazonriverbasin_basemap.png/640px-Amazonriverbasin_basemap.png"},
-        {"title": "Amazonia peruana","url": f"{_W}/1/13/7_-_Itahuania_-_Ao%C3%BBt_2008.JPG/640px-7_-_Itahuania_-_Ao%C3%BBt_2008.JPG"},
-    ],
-    "tumbes": [
-        {"title": "Tumbes",          "url": f"{_W}/6/65/PLAZA_DE_ARMAS_DE_PIURA_-_PIURA.jpg/640px-PLAZA_DE_ARMAS_DE_PIURA_-_PIURA.jpg"},
-        {"title": "Playa Mancora",   "url": f"{_W}/6/65/Mancorabeach1.jpg/640px-Mancorabeach1.jpg"},
-        {"title": "Ceviche",         "url": f"{_W}/7/78/Cebiche_de_corvina.JPG/640px-Cebiche_de_corvina.JPG"},
-        {"title": "Tiradito",        "url": f"{_W}/1/18/Tiradito.jpg/640px-Tiradito.jpg"},
-        {"title": "Manglares Tumbes","url": f"{_W}/5/56/Amazon17_%285641020319%29.jpg/640px-Amazon17_%285641020319%29.jpg"},
-        {"title": "Punta Sal",       "url": f"{_W}/6/65/Mancorabeach1.jpg/640px-Mancorabeach1.jpg"},
-    ],
-    "moquegua": [
-        {"title": "Moquegua",        "url": f"{_W}/a/a3/Volcano_Misti%2C_Peru.jpg/640px-Volcano_Misti%2C_Peru.jpg"},
-        {"title": "Toro Muerto",     "url": f"{_W}/1/13/Colca_Canyon_Puno.jpg/640px-Colca_Canyon_Puno.jpg"},
-        {"title": "Ceviche",         "url": f"{_W}/7/78/Cebiche_de_corvina.JPG/640px-Cebiche_de_corvina.JPG"},
-        {"title": "Aji de gallina",  "url": f"{_W}/e/e1/Aj%C3%AD_de_gallina.jpg/640px-Aj%C3%AD_de_gallina.jpg"},
-        {"title": "Volcan El Misti", "url": f"{_W}/a/a3/Volcano_Misti%2C_Peru.jpg/640px-Volcano_Misti%2C_Peru.jpg"},
-        {"title": "Cocina andina",   "url": f"{_W}/5/57/PachaComer.jpg/640px-PachaComer.jpg"},
-    ],
-    "juliaca": [
-        {"title": "Juliaca",         "url": f"{_W}/0/00/Vista_de_Puno_y_el_Titicaca%2C_Per%C3%BA%2C_2015-08-01%2C_DD_63.JPG/640px-Vista_de_Puno_y_el_Titicaca%2C_Per%C3%BA%2C_2015-08-01%2C_DD_63.JPG"},
-        {"title": "Lago Titicaca",   "url": f"{_W}/7/73/Lake_Titicaca_ESA22522896.jpeg/640px-Lake_Titicaca_ESA22522896.jpeg"},
-        {"title": "Cocina andina",   "url": f"{_W}/5/57/PachaComer.jpg/640px-PachaComer.jpg"},
-        {"title": "Pachamanca",      "url": f"{_W}/5/57/PachaComer.jpg/640px-PachaComer.jpg"},
-        {"title": "Sillustani",      "url": f"{_W}/4/49/Sillustani%2C_Per%C3%BA%2C_2015-08-01%2C_DD_87.JPG/640px-Sillustani%2C_Per%C3%BA%2C_2015-08-01%2C_DD_87.JPG"},
-        {"title": "Isla Taquile",    "url": f"{_W}/a/a1/Taquile_from_Amantani.jpg/640px-Taquile_from_Amantani.jpg"},
-    ],
-    "chimbote": [
-        {"title": "Chimbote",        "url": f"{_W}/e/ed/Freedom_Monument%2C_Trujillo.jpg/640px-Freedom_Monument%2C_Trujillo.jpg"},
-        {"title": "Bahia Chimbote",  "url": f"{_W}/f/f8/Amazon_River_ESA387332.jpg/640px-Amazon_River_ESA387332.jpg"},
-        {"title": "Ceviche",         "url": f"{_W}/7/78/Cebiche_de_corvina.JPG/640px-Cebiche_de_corvina.JPG"},
-        {"title": "Anticuchos",      "url": f"{_W}/2/26/Anticuchos_-_Grilled_Beef_Heart_skewers.jpg/640px-Anticuchos_-_Grilled_Beef_Heart_skewers.jpg"},
-        {"title": "Huascaran",       "url": f"{_W}/5/59/Nevado_Huascar%C3%A1n3.jpg/640px-Nevado_Huascar%C3%A1n3.jpg"},
-        {"title": "Cordillera Blanca","url": f"{_W}/9/96/Beauty_of_mount_Huandoy%2C_Cordillera_Blanca%2C_Ancash%2C_Peru.jpg/640px-Beauty_of_mount_Huandoy%2C_Cordillera_Blanca%2C_Ancash%2C_Peru.jpg"},
-    ],
-    "pucallpa": [
-        {"title": "Pucallpa",        "url": f"{_W}/1/1f/Plaza_de_Armas_en_Iquitos.jpg/640px-Plaza_de_Armas_en_Iquitos.jpg"},
-        {"title": "Lago Yarinacocha","url": f"{_W}/f/f8/Amazon_River_ESA387332.jpg/640px-Amazon_River_ESA387332.jpg"},
-        {"title": "Lomo saltado",    "url": f"{_W}/8/80/Lomo_Saltado_-_Lima%2C_Peru_Miraflores_%28Tiendecita_Blanca%29.jpg/640px-Lomo_Saltado_-_Lima%2C_Peru_Miraflores_%28Tiendecita_Blanca%29.jpg"},
-        {"title": "Amazonia peruana","url": f"{_W}/1/13/7_-_Itahuania_-_Ao%C3%BBt_2008.JPG/640px-7_-_Itahuania_-_Ao%C3%BBt_2008.JPG"},
-        {"title": "Selva amazonica", "url": f"{_W}/5/56/Amazon17_%285641020319%29.jpg/640px-Amazon17_%285641020319%29.jpg"},
-        {"title": "Rio Ucayali",     "url": f"{_W}/0/02/Amazonriverbasin_basemap.png/640px-Amazonriverbasin_basemap.png"},
-    ],
-    "sullana": [
-        {"title": "Sullana",         "url": f"{_W}/6/65/PLAZA_DE_ARMAS_DE_PIURA_-_PIURA.jpg/640px-PLAZA_DE_ARMAS_DE_PIURA_-_PIURA.jpg"},
-        {"title": "Playa Mancora",   "url": f"{_W}/6/65/Mancorabeach1.jpg/640px-Mancorabeach1.jpg"},
-        {"title": "Ceviche",         "url": f"{_W}/7/78/Cebiche_de_corvina.JPG/640px-Cebiche_de_corvina.JPG"},
-        {"title": "Tiradito",        "url": f"{_W}/1/18/Tiradito.jpg/640px-Tiradito.jpg"},
-        {"title": "Catacaos",        "url": f"{_W}/d/db/Iglesia_San_Juan_Bautista%2C_Catacaos_01.jpg/640px-Iglesia_San_Juan_Bautista%2C_Catacaos_01.jpg"},
-        {"title": "Huancabamba",     "url": f"{_W}/d/db/Huancabamba_aerialview.jpg/640px-Huancabamba_aerialview.jpg"},
-    ],
-    "huanuco": [
-        {"title": "Huanuco",         "url": f"{_W}/f/fd/Plaza_de_la_Constituci%C3%B3n_Huancayo.jpg/640px-Plaza_de_la_Constituci%C3%B3n_Huancayo.jpg"},
-        {"title": "Kotosh",          "url": f"{_W}/5/57/PachaComer.jpg/640px-PachaComer.jpg"},
-        {"title": "Cocina andina",   "url": f"{_W}/5/57/PachaComer.jpg/640px-PachaComer.jpg"},
-        {"title": "Pachamanca",      "url": f"{_W}/5/57/PachaComer.jpg/640px-PachaComer.jpg"},
-        {"title": "Papa a la huancaina","url": f"{_W}/7/74/Papa_a_la_huancaina.jpg/640px-Papa_a_la_huancaina.jpg"},
-        {"title": "Cordillera Blanca","url": f"{_W}/9/96/Beauty_of_mount_Huandoy%2C_Cordillera_Blanca%2C_Ancash%2C_Peru.jpg/640px-Beauty_of_mount_Huandoy%2C_Cordillera_Blanca%2C_Ancash%2C_Peru.jpg"},
-    ],
-    "abancay": [
-        {"title": "Abancay",         "url": f"{_W}/8/85/Catedral_de_Ayacucho_%28Catedral_Bas%C3%ADlica_de_Santa_Mar%C3%ADa%29.jpg/640px-Catedral_de_Ayacucho_%28Catedral_Bas%C3%ADlica_de_Santa_Mar%C3%ADa%29.jpg"},
-        {"title": "Cañon del Apurimac","url": f"{_W}/1/13/Colca_Canyon_Puno.jpg/640px-Colca_Canyon_Puno.jpg"},
-        {"title": "Cocina andina",   "url": f"{_W}/5/57/PachaComer.jpg/640px-PachaComer.jpg"},
-        {"title": "Anticuchos",      "url": f"{_W}/2/26/Anticuchos_-_Grilled_Beef_Heart_skewers.jpg/640px-Anticuchos_-_Grilled_Beef_Heart_skewers.jpg"},
-        {"title": "Saywite",         "url": f"{_W}/6/60/Sacsayhuam%C3%A1n%2C_Cusco%2C_Per%C3%BA%2C_2015-07-31%2C_DD_27.JPG/640px-Sacsayhuam%C3%A1n%2C_Cusco%2C_Per%C3%BA%2C_2015-07-31%2C_DD_27.JPG"},
-        {"title": "Rio Pachachaca",  "url": f"{_W}/1/13/Colca_Canyon_Puno.jpg/640px-Colca_Canyon_Puno.jpg"},
-    ],
-    "tingo maria": [
-        {"title": "Tingo Maria",     "url": f"{_W}/5/56/Amazon17_%285641020319%29.jpg/640px-Amazon17_%285641020319%29.jpg"},
-        {"title": "Cueva de las Lechuzas","url": f"{_W}/1/13/7_-_Itahuania_-_Ao%C3%BBt_2008.JPG/640px-7_-_Itahuania_-_Ao%C3%BBt_2008.JPG"},
-        {"title": "Lomo saltado",    "url": f"{_W}/8/80/Lomo_Saltado_-_Lima%2C_Peru_Miraflores_%28Tiendecita_Blanca%29.jpg/640px-Lomo_Saltado_-_Lima%2C_Peru_Miraflores_%28Tiendecita_Blanca%29.jpg"},
-        {"title": "Amazonia peruana","url": f"{_W}/1/13/7_-_Itahuania_-_Ao%C3%BBt_2008.JPG/640px-7_-_Itahuania_-_Ao%C3%BBt_2008.JPG"},
-        {"title": "Selva amazonica", "url": f"{_W}/5/56/Amazon17_%285641020319%29.jpg/640px-Amazon17_%285641020319%29.jpg"},
-        {"title": "Rio Huallaga",    "url": f"{_W}/2/2b/Riu_Huallaga_des_de_la_carretera_de_Sauce04.jpg/640px-Riu_Huallaga_des_de_la_carretera_de_Sauce04.jpg"},
-    ],
+_IMG_DL_HDRS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept": "image/webp,image/jpeg,image/png,image/*,*/*;q=0.8",
 }
 
 
+async def _download_img(client: httpx.AsyncClient, url: str, title: str) -> dict | None:
+    """Download one image URL and return {title, data} with base64 dataURL, or None."""
+    try:
+        resp = await client.get(url, timeout=8.0)
+        if resp.status_code != 200:
+            return None
+        ct = resp.headers.get("content-type", "")
+        if not ct.startswith("image/") or "svg" in ct:
+            return None
+        if len(resp.content) > 4_000_000:          # skip images > 4 MB
+            return None
+        if "png" in ct:    fmt = "png"
+        elif "gif" in ct:  fmt = "gif"
+        elif "webp" in ct: fmt = "webp"
+        else:              fmt = "jpeg"
+        b64 = base64.b64encode(resp.content).decode()
+        return {"title": title, "data": f"data:image/{fmt};base64,{b64}"}
+    except Exception:
+        return None
+
+
+
+
 # ---------------------------------------------------------------------------
-# Route map — real OSM tile map with walking route drawn on it
+# Route map - real OSM tile map with walking route drawn on it
 # ---------------------------------------------------------------------------
 
 _NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
@@ -455,19 +260,69 @@ def health() -> HealthResponse:
 
 
 @app.get("/images/{destination}", tags=["utils"])
-def get_destination_images(destination: str) -> dict:
-    """Return hardcoded Wikimedia CDN image URLs for a Peru destination.
+async def get_destination_images(destination: str) -> dict:
+    """Search destination images via Tavily and return as base64 data URLs.
 
-    No Wikipedia API calls — zero rate-limiting risk on Railway.
-    Returns: {plaza, top, extras[]} where each value is {title, url} or null.
+    Images are downloaded server-side - no CORS issues in browser or jsPDF.
+    Results cached 24 h to minimize Tavily API consumption.
+    Returns {plaza, top, extras[]} where each item is {title, data} or null.
     """
-    key  = destination.lower().strip()
-    imgs = _DEST_IMGS.get(key, [])
-    return {
-        "plaza":  imgs[0] if len(imgs) > 0 else None,
-        "top":    imgs[1] if len(imgs) > 1 else None,
-        "extras": imgs[2:6],
+    key = destination.lower().strip()
+
+    # Serve from cache if fresh
+    cached = _img_cache.get(key)
+    if cached:
+        result, ts = cached
+        if _time.time() - ts < _IMG_CACHE_TTL:
+            return result
+
+    from agent import _get_tavily   # lazy import - avoids circular at startup
+    tavily = _get_tavily()
+
+    # Two focused searches: city+tourism, then food+accommodation
+    dest_title = destination.title()
+    candidate_urls: list[tuple[str, str]] = []   # (url, title)
+
+    search_plans = [
+        (
+            f"fotos {destination} Peru plaza de armas ciudad turismo atractivos turisticos",
+            [f"Ciudad {dest_title}", f"Turismo {dest_title}", f"Plaza de Armas {dest_title}", "Atractivo turistico"],
+        ),
+        (
+            f"gastronomia comida tipica {destination} Peru hotel hospedaje restaurante",
+            ["Gastronomia local", "Comida tipica peruana", f"Hospedaje en {dest_title}", "Restaurante local"],
+        ),
+    ]
+
+    for query, titles in search_plans:
+        try:
+            res = tavily.search(query, max_results=3, include_images=True)
+            for i, img_url in enumerate(res.get("images", [])[:4]):
+                if img_url and img_url.startswith("http"):
+                    title = titles[i] if i < len(titles) else dest_title
+                    candidate_urls.append((img_url, title))
+        except Exception as exc:
+            print(f"[images] Tavily search error for '{destination}': {exc}")
+
+    if not candidate_urls:
+        empty: dict = {"plaza": None, "top": None, "extras": []}
+        _img_cache[key] = (empty, _time.time())
+        return empty
+
+    # Download images concurrently (try up to 8, keep first 6 that succeed)
+    async with httpx.AsyncClient(headers=_IMG_DL_HDRS, follow_redirects=True) as client:
+        tasks = [_download_img(client, url, title) for url, title in candidate_urls[:8]]
+        downloaded = list(await asyncio.gather(*tasks))
+
+    images = [r for r in downloaded if r][:6]
+
+    result = {
+        "plaza":  images[0] if len(images) > 0 else None,
+        "top":    images[1] if len(images) > 1 else None,
+        "extras": images[2:6],
     }
+    _img_cache[key] = (result, _time.time())
+    return result
 
 
 @app.get("/route-map/{destination}", tags=["utils"])
@@ -566,7 +421,7 @@ def chat(
     tokens: int = result["tokens_used"]
     used_search: bool = result["used_search"]
 
-    if reply.startswith("Lo siento, ocurrió un error"):
+    if reply.startswith("Lo siento, ocurriÃ³ un error"):
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="El agente no pudo procesar la consulta. Intenta de nuevo.",
@@ -598,7 +453,7 @@ def chat(
 )
 def get_history(
     user: CurrentUser,
-    uid: Annotated[str | None, Query(description="UID objetivo (admin/viewer pueden inspeccionar cualquier sesión)")] = None,
+    uid: Annotated[str | None, Query(description="UID objetivo (admin/viewer pueden inspeccionar cualquier sesiÃ³n)")] = None,
 ) -> HistoryResponse:
     """Return the full message history for a user session.
 
@@ -613,7 +468,7 @@ def get_history(
     elif uid:
         target_uid = uid
     else:
-        # admin/viewer with no uid → show own history
+        # admin/viewer with no uid â†’ show own history
         target_uid = user["uid"]
 
     try:
@@ -844,7 +699,7 @@ def admin_update_role(uid: str, body: UserRoleUpdateRequest, user: CurrentUser) 
     valid = {"assistant_user", "viewer", "admin", None}
     if body.role not in valid:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                            detail=f"Rol inválido: {body.role!r}. Válidos: assistant_user, viewer, admin.")
+                            detail=f"Rol invÃ¡lido: {body.role!r}. VÃ¡lidos: assistant_user, viewer, admin.")
     try:
         set_user_role(uid, body.role)
     except Exception as exc:
@@ -876,7 +731,7 @@ def admin_delete_user(uid: str, user: CurrentUser) -> DeleteResponse:
 
 
 # ---------------------------------------------------------------------------
-# Static files — prefer built React dist, fall back to raw frontend dir
+# Static files â€” prefer built React dist, fall back to raw frontend dir
 # Must be mounted LAST so API routes take priority.
 # html=True enables SPA fallback (all unknown paths serve index.html).
 # No-cache for HTML is handled by _NoCacheHtmlMiddleware above.
