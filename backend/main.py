@@ -390,9 +390,9 @@ _TOP_ATTR: dict[str, str] = {
     "machu picchu": "Machu Picchu Citadel",
     "lima":         "Larco Museum",
     "arequipa":     "Monastery of Santa Catalina",
-    "puno":         "Mirador El Condor",
+    "puno":         "Sillustani",
     "trujillo":     "Chan Chan",
-    "iquitos":      "Belen Market",
+    "iquitos":      "Malecon Tarapaca Iquitos",
     "huaraz":       "Llanganuco Lakes",
     "paracas":      "Paracas National Reserve",
     "nazca":        "Nazca Lines Viewpoint",
@@ -489,8 +489,13 @@ async def get_route_map(destination: str) -> dict:
             r1_resp = await client.get(_NOMINATIM_URL, params={"q": from_q, "format": "json", "limit": 1, "countrycodes": "pe"})
             await asyncio.sleep(1.1)  # Nominatim ToS: max 1 req/sec
             r2_resp = await client.get(_NOMINATIM_URL, params={"q": to_q,   "format": "json", "limit": 1, "countrycodes": "pe"})
-        r1 = r1_resp.json()
-        r2 = r2_resp.json()
+            r1 = r1_resp.json()
+            r2 = r2_resp.json()
+            # Fallback: if destination+attraction fails, try attraction-only query
+            if not r2:
+                await asyncio.sleep(1.1)
+                r2_resp = await client.get(_NOMINATIM_URL, params={"q": f"{top_name} Peru", "format": "json", "limit": 1, "countrycodes": "pe"})
+                r2 = r2_resp.json()
         if not r1 or not r2:
             raise ValueError("Geocoding returned no results")
 
