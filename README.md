@@ -2,7 +2,7 @@
 
 Asistente conversacional especializado en viajes dentro del Perú. Permite a los viajeros consultar en tiempo real vuelos, rutas de bus, hospedaje, gastronomía, atracciones turísticas y condiciones climáticas de cualquier ciudad peruana, combinando inteligencia artificial con búsqueda web actualizada, galería fotográfica de destinos y reportes PDF enriquecidos.
 
-> **Desarrollado por Oscar Zelada Pozo** · React 18 + Vite · FastAPI · Mistral AI · Tavily · Firebase · Firestore · Railway · v2.2 — Mayo 2026
+> **Desarrollado por Oscar Zelada Pozo** · React 18 + Vite · FastAPI · Mistral AI · Tavily · Firebase · Firestore · Railway · v2.3 — Mayo 2026
 
 ---
 
@@ -20,10 +20,11 @@ Asistente conversacional especializado en viajes dentro del Perú. Permite a los
 - **Búsqueda web en tiempo real** — Tavily recupera precios y condiciones actualizadas; el badge 🔍 indica cuándo se usó.
 
 ### Galería fotográfica de destinos
-- **Imágenes automáticas en el chat** — tras cada respuesta del asistente, el sistema muestra automáticamente **mínimo 4 fotografías** del destino en cuadrícula **2×2**: Plaza de Armas, atracción principal y hasta 2 lugares adicionales (monumentos, naturaleza, gastronomía local).
+- **Imágenes automáticas en el chat** — tras cada respuesta del asistente, el sistema muestra automáticamente **hasta 6 fotografías** del destino en cuadrícula: ciudad, turismo, gastronomía y alojamiento.
+- **Búsqueda dinámica con Tavily** — el backend lanza 2 búsquedas por ciudad (turismo + gastronomía/hospedaje) con `include_images=True`, descarga las imágenes de forma concurrente y las devuelve como **data URLs en Base64**; el navegador nunca realiza peticiones externas de imágenes (cero problemas CORS).
 - **Detección inteligente del destino** — el sistema analiza la conversación completa en 3 pasos: (1) patrones directos del usuario como "viajar a Cusco", (2) ciudad más mencionada en las respuestas del asistente, (3) primera ciudad encontrada como respaldo.
-- Las imágenes se obtienen mediante un **proxy backend** que consulta Wikimedia Commons sin restricciones CORS; el navegador nunca realiza peticiones a servicios externos de imágenes.
-- **18 ciudades mapeadas con hasta 6 imágenes cada una**: Cusco, Lima, Arequipa, Puno, Trujillo, Iquitos, Huaraz, Paracas, Nazca, Chiclayo, Ayacucho, Cajamarca, Tarapoto, Tacna, Piura, Huancayo, Ica y Machu Picchu.
+- **Cualquier ciudad del Perú** soportada sin configuración adicional — no hay listas estáticas; las imágenes son siempre actuales.
+- **Caché en memoria de 24 horas** — primera consulta por ciudad ~8-14 s; consultas subsiguientes ~1-2 s.
 
 ### Interfaz de usuario
 - **Historial de chats por sesión** — cada conversación se guarda en Firestore con ID basado en fecha/hora (`YYYYMMDD_HHmmss_mmm`). Se puede navegar entre chats anteriores desde el sidebar.
@@ -50,7 +51,7 @@ Documento completo con todas las conversaciones organizadas por tema. El botón 
   4. 🍽️ Costos de Alimentación y Transporte Local
   5. 🗺️ Lugares que Visitar y sus Costos
   6. ℹ️ Otros Datos de Interés para el Turista
-- **Galería fotográfica en cuadrícula 2×2**: mínimo 4 fotos del destino (Plaza de Armas, atracción top, y hasta 2 lugares adicionales) en dos filas de 2 columnas, obtenidas vía backend proxy de Wikimedia Commons.
+- **Galería fotográfica**: hasta 6 fotos del destino (ciudad, turismo, gastronomía, hospedaje) obtenidas dinámicamente vía Tavily y servidas como Base64 desde el backend — compatibles con jsPDF sin restricciones CORS.
 - **Sección de ruta — CÓMO LLEGAR** (solo para el destino del viaje):
   - Punto de inicio: **Plaza de Armas de la ciudad destino** (no de la ciudad de origen).
   - **Diagrama visual tipo mapa**: fondo beige estilo OSM, cuadrícula de calles, arco parabólico azul del punto A al B, marcadores circulares con letras.
@@ -67,7 +68,7 @@ Documento condensado de **máximo 2 páginas** generado por IA (Mistral AI). El 
 
 - **Pre-generado automáticamente** tras cada respuesta del asistente — el botón muestra `✓` cuando el resumen está listo en caché y la descarga es **instantánea** (sin espera).
 - **Nombre de archivo inteligente**: `Resumen_viaje_<origen>_<destino>_<fecha>.pdf`.
-- **2 imágenes obligatorias de la ciudad destino**: Plaza de Armas + principal atracción turística, siempre presentes y correctamente asociadas al destino del viaje.
+- **Imágenes dinámicas de la ciudad destino** obtenidas vía Tavily y servidas en Base64 desde el backend, siempre actuales y sin problemas CORS.
 - Estructura visual escaneable en una sola vista:
   - Franja de destino destacada (fondo azul oscuro, texto dorado).
   - **Columna izquierda**: Condiciones climáticas — temperatura, descripción, recomendación de ropa.
@@ -158,8 +159,8 @@ cambio de moneda y seguridad.
 | **Uvicorn** | 0.30 | Servidor ASGI |
 | **Mistral AI** (`mistral-large-latest`) | — | LLM principal + extracción estructurada para PDF resumen |
 | **LangChain + LangChain-Mistral** | 0.3 | Orquestación del agente conversacional |
-| **Tavily** | 0.3 | Búsqueda web en tiempo real |
-| **httpx** | 0.27 | Proxy server-side de imágenes Wikimedia (sin CORS) |
+| **Tavily** | 0.3 | Búsqueda web en tiempo real + búsqueda dinámica de imágenes por destino |
+| **httpx** | 0.27 | Descarga concurrente de imágenes server-side como Base64 (sin CORS) |
 | **Firebase Admin SDK** | 6.5 | Verificación de tokens JWT y gestión de usuarios |
 | **Firestore** | — | Base de datos NoSQL (historial y perfiles) |
 | **python-dotenv** | 1.0 | Gestión de variables de entorno |
@@ -175,7 +176,7 @@ cambio de moneda y seguridad.
 | **jsPDF** | 2.5 | Generación de PDF en el navegador (2 modos: Detallado y Resumen) |
 | **Nominatim (OpenStreetMap)** | — | Geocodificación inversa (ciudad del usuario) y búsqueda de coordenadas |
 | **OSRM** | — | Cálculo de rutas a pie y en vehículo (Open Source Routing Machine) |
-| **Wikimedia Commons API** | — | Imágenes de destinos turísticos (proxy via backend) |
+| **Tavily Image Search** | — | Imágenes dinámicas de destinos (via backend, Base64 data URLs) |
 | **CSS Variables** | — | Tema turismo Perú (rojo, dorado, azul andino) |
 
 ### Infraestructura
@@ -196,7 +197,8 @@ chatbot-infraestructura/
 │
 ├── backend/                        # API REST (Python / FastAPI)
 │   ├── main.py                     # Entrypoint: rutas, CORS, StaticFiles SPA,
-│   │                               #   endpoint /images/{destination} (proxy Wikimedia)
+│   │                               #   endpoint /images/{destination} (Tavily + Base64),
+│   │                               #   mapa de rutas (staticmap + OSRM + Nominatim)
 │   ├── agent.py                    # Agente Mistral: prompt, búsqueda Tavily,
 │   │                               #   generate_summary() para PDF resumen
 │   ├── auth.py                     # Verificación de tokens Firebase y control de roles
@@ -405,7 +407,7 @@ python assign_role.py abc123uid assistant_user
 | Método | Ruta | Rol requerido | Descripción |
 |---|---|---|---|
 | `GET` | `/health` | Público | Estado del servidor |
-| `GET` | `/images/{destination}` | Público | Proxy de imágenes Wikimedia para destino peruano |
+| `GET` | `/images/{destination}` | Público | Búsqueda dinámica de imágenes via Tavily + descarga Base64 (24 h caché) |
 | `POST` | `/chat` | `assistant_user`, `admin` | Enviar mensaje al asistente IA |
 | `GET` | `/chats` | `assistant_user`, `viewer`, `admin` | Listar todos los chats del usuario |
 | `GET` | `/chats/{chat_id}` | `assistant_user`, `viewer`, `admin` | Obtener mensajes de un chat específico |
@@ -430,9 +432,9 @@ La documentación interactiva Swagger está disponible en `/docs`.
 | | |
 |---|---|
 | **Desarrollador** | Oscar Zelada Pozo |
-| **Versión** | 2.2 — Mayo 2026 |
-| **Stack principal** | React 18 · FastAPI · Mistral AI · Firebase · Firestore · Railway |
-| **Imágenes** | Wikimedia Commons (licencia libre) vía proxy backend |
+| **Versión** | 2.3 — Mayo 2026 |
+| **Stack principal** | React 18 · FastAPI · Mistral AI · Tavily · Firebase · Firestore · Railway |
+| **Imágenes** | Tavily Image Search — búsqueda dinámica, descarga Base64 server-side |
 | **Mapas y rutas** | OpenStreetMap (Nominatim) + OSRM — datos © OpenStreetMap contributors |
 | **Documentación técnica** | `CASO_DE_USO.md` — estándar UML 2.5 / IEEE 830 / RUP |
 
