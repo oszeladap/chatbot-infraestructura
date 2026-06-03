@@ -13,6 +13,7 @@
 | **Estado** | Aprobado |
 | **Metodología** | UML 2.5 — IEEE 830 — RUP (Rational Unified Process) |
 | **Clasificación** | Uso interno / Documentación técnica |
+| **Autor** | Oscar Zelada Pozo / Uso INterno |
 
 ---
 

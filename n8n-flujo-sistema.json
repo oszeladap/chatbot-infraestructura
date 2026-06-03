@@ -1,0 +1,229 @@
+{
+  "name": "Sistema Inteligente de Viajes de Perú — v2.3",
+  "nodes": [
+
+    { "id": "s-title", "name": "📌 Título", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [-1120, -320],
+      "parameters": { "width": 5400, "height": 120, "color": 7,
+        "content": "## 🇵🇪 Sistema Inteligente de Viajes de Perú — v2.3\n**Stack**: React 18 · FastAPI · Mistral AI · Tavily · Firebase · Firestore · Railway · Desarrollado por Oscar Zelada Pozo" } },
+
+    { "id": "s-f1", "name": "📌 Fondo Chat", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [-1120, -160],
+      "parameters": { "width": 5400, "height": 740, "color": 5,
+        "content": "## 🤖 FLUJO 1 — Chat Conversacional IA\n`POST /chat` · Roles: **assistant_user · admin** · Fuente: `backend/main.py` → `backend/agent.py`" } },
+
+    { "id": "s-f2", "name": "📌 Fondo Imágenes", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [-1120, 660],
+      "parameters": { "width": 4200, "height": 480, "color": 6,
+        "content": "## 📸 FLUJO 2 — Galería de Imágenes por Destino\n`GET /images/{destination}` · Público · Tavily Image Search → httpx concurrente → Base64 · Caché en memoria 24h" } },
+
+    { "id": "s-f3", "name": "📌 Fondo Mapa", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [-1120, 1220],
+      "parameters": { "width": 3800, "height": 480, "color": 3,
+        "content": "## 🗺️ FLUJO 3 — Mapa de Ruta Interactivo\n`GET /route-map/{destination}` · Público · Nominatim geocoding → OSRM routing → staticmap PNG → Base64" } },
+
+    { "id": "s-f4", "name": "📌 Fondo Resumen", "type": "n8n-nodes-base.stickyNote", "typeVersion": 1, "position": [-1120, 1780],
+      "parameters": { "width": 3000, "height": 460, "color": 1,
+        "content": "## 📄 FLUJO 4 — Resumen Ejecutivo PDF (IA)\n`POST /summary` · Roles: **assistant_user · admin** · Mistral AI extrae JSON estructurado: destino · clima · costos · lugares · consejos" } },
+
+    { "id": "f1-webhook", "name": "POST /chat", "type": "n8n-nodes-base.webhook", "typeVersion": 2, "position": [-880, 100],
+      "parameters": { "path": "chat", "httpMethod": "POST", "responseMode": "responseNode", "options": {} } },
+
+    { "id": "f1-auth", "name": "🔐 Verificar JWT Firebase", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [-560, 100],
+      "parameters": { "jsCode": "// auth.py → get_current_user()\n// Firebase Admin SDK: admin.auth().verify_id_token(token)\n// Extrae del token: uid, email, role (custom claim)\n// Lanza 401 si token inválido o expirado\nconst bearer = items[0].json.headers?.authorization ?? '';\nconst token = bearer.replace('Bearer ', '');\nconst decoded = await admin.auth().verifyIdToken(token);\nreturn [{ json: { uid: decoded.uid, email: decoded.email, role: decoded.role ?? null,\n  message: items[0].json.body.message, chat_id: items[0].json.body.chat_id } }];" } },
+
+    { "id": "f1-role", "name": "🎭 ¿Rol assistant_user o admin?", "type": "n8n-nodes-base.if", "typeVersion": 2, "position": [-240, 100],
+      "parameters": { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+        "conditions": [{ "id": "r1", "leftValue": "={{ $json.role }}", "rightValue": "assistant_user",
+          "operator": { "type": "string", "operation": "equals" } }, { "id": "r2", "leftValue": "={{ $json.role }}", "rightValue": "admin",
+          "operator": { "type": "string", "operation": "equals" } }], "combinator": "or" }, "options": {} } },
+
+    { "id": "f1-403", "name": "❌ 403 Sin Permisos", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1.1, "position": [-240, 360],
+      "parameters": { "respondWith": "json", "responseBody": "={\"detail\":\"Insufficient permissions — role required: assistant_user or admin\"}", "options": { "responseCode": 403 } } },
+
+    { "id": "f1-history", "name": "📚 Obtener Historial Firestore", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [80, 100],
+      "parameters": { "jsCode": "// firestore_service.py → get_chat_messages(uid, chat_id)\n// Colección: sessions/{uid}/chats/{chat_id} → messages[]\n// Retorna lista [{role, content, tokens, timestamp}] para contexto del LLM\nconst { uid, chat_id, message } = $json;\nconst doc = await db.collection('sessions').doc(uid)\n  .collection('chats').doc(chat_id).get();\nconst history = doc.data()?.messages ?? [];\nreturn [{ json: { uid, chat_id, message, history } }];" } },
+
+    { "id": "f1-searchif", "name": "🔍 ¿Requiere Búsqueda Web?", "type": "n8n-nodes-base.if", "typeVersion": 2, "position": [400, 100],
+      "parameters": { "conditions": { "options": { "caseSensitive": false },
+        "conditions": [{ "id": "s1", "leftValue": "={{ $json.message }}",
+          "rightValue": "vuelo|bus|precio|hotel|clima|costo|tarifa|horario|cusco|lima|arequipa|trujillo|iquitos|piura|aerol",
+          "operator": { "type": "string", "operation": "regex" } }], "combinator": "and" }, "options": {} } },
+
+    { "id": "f1-tav-transport", "name": "🌐 Tavily: Transporte y Turismo", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [720, -60],
+      "parameters": { "method": "POST", "url": "https://api.tavily.com/search",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ api_key: $env.TAVILY_API_KEY, query: $json.message + ' precios transporte Peru aereo terrestre hospedaje turismo', max_results: 4 }) }}",
+        "options": { "timeout": 15000 } } },
+
+    { "id": "f1-tav-weather", "name": "🌐 Tavily: Clima Meteorológico", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [720, 160],
+      "parameters": { "method": "POST", "url": "https://api.tavily.com/search",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ api_key: $env.TAVILY_API_KEY, query: 'clima temperatura lluvia ' + ($json.message.match(/cusco|lima|arequipa|trujillo|iquitos|piura|puno/i)?.[0] ?? 'Lima') + ' Peru hoy', max_results: 2 }) }}",
+        "options": { "timeout": 15000 } } },
+
+    { "id": "f1-noop", "name": "⏭️ Sin Búsqueda (respuesta rápida)", "type": "n8n-nodes-base.noOp", "typeVersion": 1, "position": [720, 340] },
+
+    { "id": "f1-merge", "name": "🔗 Combinar Contexto de Búsqueda", "type": "n8n-nodes-base.merge", "typeVersion": 3, "position": [1040, 60],
+      "parameters": { "mode": "combine", "combineBy": "combineAll", "options": {} } },
+
+    { "id": "f1-mistral", "name": "🧠 Mistral AI — mistral-large-latest", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [1360, 100],
+      "parameters": { "method": "POST", "url": "https://api.mistral.ai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "Authorization", "value": "=Bearer {{ $env.MISTRAL_API_KEY }}" },
+          { "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-large-latest', temperature: 0.3, messages: [{ role: 'system', content: 'Eres el asistente del Sistema Inteligente de Viajes de Peru. Fecha: ' + new Date().toLocaleDateString('es-PE') + '. Usa emojis, tablas markdown y secciones. Incluye siempre clima del destino.' }, ...$json.history.map(h => ({ role: h.role, content: h.content })), { role: 'user', content: $json.message }] }) }}",
+        "options": { "timeout": 30000 } } },
+
+    { "id": "f1-save", "name": "💾 Guardar Mensajes en Firestore", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1680, 100],
+      "parameters": { "jsCode": "// firestore_service.py → save_chat_message()\n// Guarda mensaje usuario (tokens=0) + respuesta asistente (tokens=total)\n// Actualiza: message_count, preview, created_at en el documento del chat\nconst reply = $json.choices[0].message.content;\nconst tokens = $json.usage?.total_tokens ?? 0;\nconst { uid, chat_id, message } = $('📚 Obtener Historial Firestore').first().json;\nawait saveMsg(uid, chat_id, 'user', message, 0);\nawait saveMsg(uid, chat_id, 'assistant', reply, tokens);\nreturn [{ json: { reply, chat_id, tokens_used: tokens, used_search: true } }];" } },
+
+    { "id": "f1-respond", "name": "✅ Respuesta JSON → React Frontend", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1.1, "position": [2000, 100],
+      "parameters": { "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ reply: $json.reply, chat_id: $json.chat_id, tokens_used: $json.tokens_used, used_search: $json.used_search }) }}",
+        "options": { "responseCode": 200 } } },
+
+    { "id": "f2-webhook", "name": "GET /images/{destination}", "type": "n8n-nodes-base.webhook", "typeVersion": 2, "position": [-880, 860],
+      "parameters": { "path": "images/:destination", "httpMethod": "GET", "responseMode": "responseNode", "options": {} } },
+
+    { "id": "f2-cacheif", "name": "⚡ ¿Cache válido? (TTL 24h)", "type": "n8n-nodes-base.if", "typeVersion": 2, "position": [-560, 860],
+      "parameters": { "conditions": { "options": {},
+        "conditions": [{ "id": "c1", "leftValue": "={{ $json.cache_age_seconds }}",
+          "rightValue": 86400, "operator": { "type": "number", "operation": "lt" } }], "combinator": "and" }, "options": {} } },
+
+    { "id": "f2-cache-hit", "name": "⚡ Servir desde Caché", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1.1, "position": [-240, 720],
+      "parameters": { "respondWith": "json", "responseBody": "={{ JSON.stringify($json.cached_result) }}", "options": { "responseCode": 200 } } },
+
+    { "id": "f2-tav1", "name": "🔍 Tavily: Ciudad y Turismo (include_images)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [-240, 860],
+      "parameters": { "method": "POST", "url": "https://api.tavily.com/search",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ api_key: $env.TAVILY_API_KEY, query: 'fotos ' + $json.destination + ' Peru plaza ciudad turismo atractivos turisticos', max_results: 3, include_images: true }) }}",
+        "options": {} } },
+
+    { "id": "f2-tav2", "name": "🔍 Tavily: Gastronomía y Hospedaje (include_images)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [80, 860],
+      "parameters": { "method": "POST", "url": "https://api.tavily.com/search",
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ api_key: $env.TAVILY_API_KEY, query: 'gastronomia comida tipica hotel hospedaje ' + $json.destination + ' Peru', max_results: 3, include_images: true }) }}",
+        "options": {} } },
+
+    { "id": "f2-merge", "name": "🔗 Combinar URLs de Imágenes", "type": "n8n-nodes-base.merge", "typeVersion": 3, "position": [400, 860],
+      "parameters": { "mode": "combine", "combineBy": "combineAll", "options": {} } },
+
+    { "id": "f2-download", "name": "⬇️ Descargar Imágenes — httpx async (max 8)", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [720, 860],
+      "parameters": { "jsCode": "// backend/main.py → _download_img() con httpx.AsyncClient\n// Descarga concurrente de hasta 8 URLs candidatas con asyncio.gather()\n// Filtros: content-type image/* · tamaño < 4MB · excluye SVG\n// Resultado: [{ title, data: 'data:image/jpeg;base64,...' }]\nconst urls1 = $input.all()[0].json.images ?? [];\nconst urls2 = $input.all()[1].json.images ?? [];\nconst allUrls = [...urls1, ...urls2].slice(0, 8);\nconst downloaded = await Promise.all(allUrls.map(url => downloadBase64(url)));\nconst images = downloaded.filter(Boolean).slice(0, 6);\nreturn [{ json: { images, destination: $('GET /images/{destination}').first().json.destination } }];" } },
+
+    { "id": "f2-cache-store", "name": "💾 Almacenar en Caché Memoria Python", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1040, 860],
+      "parameters": { "jsCode": "// backend/main.py → _img_cache[key] = (result, time.time())\n// Estructura: { plaza: img0, top: img1, extras: [img2..img5] }\n// TTL: 86400 s · Primera consulta ~8-14s · Subsiguientes ~1-2s\nconst imgs = $json.images;\nconst result = { plaza: imgs[0] ?? null, top: imgs[1] ?? null, extras: imgs.slice(2) };\nstoreCache($json.destination, result);\nreturn [{ json: result }];" } },
+
+    { "id": "f2-respond", "name": "✅ Base64 Images → jsPDF y Chat", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1.1, "position": [1360, 860],
+      "parameters": { "respondWith": "json", "responseBody": "={{ JSON.stringify($json) }}", "options": { "responseCode": 200 } } },
+
+    { "id": "f3-webhook", "name": "GET /route-map/{destination}", "type": "n8n-nodes-base.webhook", "typeVersion": 2, "position": [-880, 1420],
+      "parameters": { "path": "route-map/:destination", "httpMethod": "GET", "responseMode": "responseNode", "options": {} } },
+
+    { "id": "f3-nom1", "name": "📍 Nominatim: Plaza de Armas (origen)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [-560, 1420],
+      "parameters": { "method": "GET", "url": "https://nominatim.openstreetmap.org/search",
+        "sendQuery": true,
+        "queryParameters": { "parameters": [
+          { "name": "q", "value": "=Plaza de Armas {{ $json.destination }} Peru" },
+          { "name": "format", "value": "json" }, { "name": "limit", "value": "1" }, { "name": "countrycodes", "value": "pe" }] },
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "User-Agent", "value": "TravelPeru/2.2 oszeladap@gmail.com" }] },
+        "options": { "timeout": 10000 } } },
+
+    { "id": "f3-nom2", "name": "📍 Nominatim: Atracción Principal (destino)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [-240, 1420],
+      "parameters": { "method": "GET", "url": "https://nominatim.openstreetmap.org/search",
+        "sendQuery": true,
+        "queryParameters": { "parameters": [
+          { "name": "q", "value": "={{ $json.top_attraction + ' ' + $json.destination + ' Peru' }}" },
+          { "name": "format", "value": "json" }, { "name": "limit", "value": "1" }, { "name": "countrycodes", "value": "pe" }] },
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "User-Agent", "value": "TravelPeru/2.2 oszeladap@gmail.com" }] },
+        "options": { "timeout": 10000 } } },
+
+    { "id": "f3-osrm", "name": "🛣️ OSRM: Ruta Driving con GeoJSON", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [80, 1420],
+      "parameters": { "method": "GET",
+        "url": "=https://router.project-osrm.org/route/v1/driving/{{ $json.from_lon }},{{ $json.from_lat }};{{ $json.to_lon }},{{ $json.to_lat }}",
+        "sendQuery": true,
+        "queryParameters": { "parameters": [
+          { "name": "overview", "value": "full" }, { "name": "geometries", "value": "geojson" }] },
+        "options": { "timeout": 12000 } } },
+
+    { "id": "f3-render", "name": "🗺️ staticmap: Render PNG 640×340 sobre OSM", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [400, 1420],
+      "parameters": { "jsCode": "// backend/main.py → _build_route_map_sync() en thread pool executor\n// staticmap + OSM tiles: a.tile.openstreetmap.org/{z}/{x}/{y}.png\n// Dibuja: Line azul (#1565A0 px4) · CircleMarker A azul (px16) · B rojo (px16)\n// PIL.Image.LANCZOS (Pillow 10+ compat)\nconst route = $json.routes?.[0];\nconst coords = route?.geometry?.coordinates ?? [];\nconst dist_m = Math.round(route?.distance ?? 0);\nconst dur_min = Math.round((route?.duration ?? 0) / 60);\nconst imgBytes = renderOSMMap(640, 340, coords, fromXY, toXY);\nreturn [{ json: { image: 'data:image/png;base64,' + btoa(imgBytes), from_label: $json.from_label,\n  to_label: $json.to_label, top_name: $json.top_name, dist_m, dur_min } }];" } },
+
+    { "id": "f3-respond", "name": "✅ Mapa PNG Base64 → jsPDF PDF", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1.1, "position": [720, 1420],
+      "parameters": { "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ image: $json.image, from_label: $json.from_label, to_label: $json.to_label, top_name: $json.top_name, dist_m: $json.dist_m, dur_min: $json.dur_min }) }}",
+        "options": { "responseCode": 200 } } },
+
+    { "id": "f4-webhook", "name": "POST /summary", "type": "n8n-nodes-base.webhook", "typeVersion": 2, "position": [-880, 1980],
+      "parameters": { "path": "summary", "httpMethod": "POST", "responseMode": "responseNode", "options": {} } },
+
+    { "id": "f4-getmsgs", "name": "📚 Obtener Mensajes del Chat (Firestore)", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [-560, 1980],
+      "parameters": { "jsCode": "// firestore_service.py → get_chat_messages(uid, chat_id)\n// Prepara texto de conversación para prompt de extracción\n// Trunca cada mensaje a 1500 chars para no exceder context window\nconst { uid, chat_id } = $json;\nconst messages = await getFirestoreMsgs(uid, chat_id);\nconst conv = messages.map(m => `${m.role === 'user' ? 'Usuario' : 'Asistente'}: ${(m.content ?? '').slice(0, 1500)}`).join('\\n\\n');\nif (!conv) throw new Error('Chat vacío o no encontrado');\nreturn [{ json: { conversation: conv } }];" } },
+
+    { "id": "f4-mistral", "name": "🧠 Mistral AI — Extracción Estructurada JSON", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2, "position": [-240, 1980],
+      "parameters": { "method": "POST", "url": "https://api.mistral.ai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [
+          { "name": "Authorization", "value": "=Bearer {{ $env.MISTRAL_API_KEY }}" },
+          { "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true, "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'mistral-large-latest', temperature: 0.1, messages: [{ role: 'user', content: 'Analiza esta conversación de viajes en Peru y responde SOLO con JSON válido con claves: destino, clima{descripcion,temperatura,recomendacion}, costos{transporte,hospedaje,alimentacion,tours}{economico,comodo}, lugares[], consejos[]\\n\\nCONVERSACIÓN:\\n' + $json.conversation }] }) }}",
+        "options": { "timeout": 30000 } } },
+
+    { "id": "f4-parse", "name": "📋 Parsear y Validar JSON Estructurado", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [80, 1980],
+      "parameters": { "jsCode": "// agent.py → generate_summary()\n// Limpia markdown fences: ```json ... ```\n// Extrae objeto JSON con regex {[\\s\\S]*}\n// Valida y completa claves faltantes con 'No disponible'\nconst raw = ($json.choices[0]?.message?.content ?? '').trim();\nconst cleaned = raw.replace(/^```(?:json)?\\s*/m,'').replace(/\\s*```\\s*$/m,'');\nconst match = cleaned.match(/\\{[\\s\\S]*\\}/);\nif (!match) throw new Error('Mistral no devolvió JSON válido');\nconst result = JSON.parse(match[0]);\nconst base = { destino:'No disponible', clima:{descripcion:'',temperatura:'',recomendacion:''},\n  costos:{transporte:{economico:'',comodo:''},hospedaje:{economico:'',comodo:''},\n  alimentacion:{economico:'',comodo:''},tours:{economico:'',comodo:''}}, lugares:[], consejos:[] };\nreturn [{ json: Object.assign(base, result) }];" } },
+
+    { "id": "f4-respond", "name": "✅ JSON Resumen → jsPDF Resumen Ejecutivo", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1.1, "position": [400, 1980],
+      "parameters": { "respondWith": "json", "responseBody": "={{ JSON.stringify($json) }}", "options": { "responseCode": 200 } } }
+
+  ],
+
+  "connections": {
+    "POST /chat":                            { "main": [[{ "node": "🔐 Verificar JWT Firebase",              "type": "main", "index": 0 }]] },
+    "🔐 Verificar JWT Firebase":             { "main": [[{ "node": "🎭 ¿Rol assistant_user o admin?",        "type": "main", "index": 0 }]] },
+    "🎭 ¿Rol assistant_user o admin?":       { "main": [
+      [{ "node": "📚 Obtener Historial Firestore",                "type": "main", "index": 0 }],
+      [{ "node": "❌ 403 Sin Permisos",                          "type": "main", "index": 0 }]] },
+    "📚 Obtener Historial Firestore":        { "main": [[{ "node": "🔍 ¿Requiere Búsqueda Web?",            "type": "main", "index": 0 }]] },
+    "🔍 ¿Requiere Búsqueda Web?":            { "main": [
+      [{ "node": "🌐 Tavily: Transporte y Turismo",               "type": "main", "index": 0 },
+       { "node": "🌐 Tavily: Clima Meteorológico",                "type": "main", "index": 0 }],
+      [{ "node": "⏭️ Sin Búsqueda (respuesta rápida)",            "type": "main", "index": 0 }]] },
+    "🌐 Tavily: Transporte y Turismo":       { "main": [[{ "node": "🔗 Combinar Contexto de Búsqueda",      "type": "main", "index": 0 }]] },
+    "🌐 Tavily: Clima Meteorológico":        { "main": [[{ "node": "🔗 Combinar Contexto de Búsqueda",      "type": "main", "index": 1 }]] },
+    "⏭️ Sin Búsqueda (respuesta rápida)":    { "main": [[{ "node": "🧠 Mistral AI — mistral-large-latest", "type": "main", "index": 0 }]] },
+    "🔗 Combinar Contexto de Búsqueda":      { "main": [[{ "node": "🧠 Mistral AI — mistral-large-latest", "type": "main", "index": 0 }]] },
+    "🧠 Mistral AI — mistral-large-latest":  { "main": [[{ "node": "💾 Guardar Mensajes en Firestore",      "type": "main", "index": 0 }]] },
+    "💾 Guardar Mensajes en Firestore":      { "main": [[{ "node": "✅ Respuesta JSON → React Frontend",    "type": "main", "index": 0 }]] },
+
+    "GET /images/{destination}":             { "main": [[{ "node": "⚡ ¿Cache válido? (TTL 24h)",           "type": "main", "index": 0 }]] },
+    "⚡ ¿Cache válido? (TTL 24h)":           { "main": [
+      [{ "node": "⚡ Servir desde Caché",                         "type": "main", "index": 0 }],
+      [{ "node": "🔍 Tavily: Ciudad y Turismo (include_images)",  "type": "main", "index": 0 },
+       { "node": "🔍 Tavily: Gastronomía y Hospedaje (include_images)", "type": "main", "index": 0 }]] },
+    "🔍 Tavily: Ciudad y Turismo (include_images)":      { "main": [[{ "node": "🔗 Combinar URLs de Imágenes", "type": "main", "index": 0 }]] },
+    "🔍 Tavily: Gastronomía y Hospedaje (include_images)": { "main": [[{ "node": "🔗 Combinar URLs de Imágenes", "type": "main", "index": 1 }]] },
+    "🔗 Combinar URLs de Imágenes":          { "main": [[{ "node": "⬇️ Descargar Imágenes — httpx async (max 8)", "type": "main", "index": 0 }]] },
+    "⬇️ Descargar Imágenes — httpx async (max 8)": { "main": [[{ "node": "💾 Almacenar en Caché Memoria Python", "type": "main", "index": 0 }]] },
+    "💾 Almacenar en Caché Memoria Python":  { "main": [[{ "node": "✅ Base64 Images → jsPDF y Chat",       "type": "main", "index": 0 }]] },
+
+    "GET /route-map/{destination}":          { "main": [[{ "node": "📍 Nominatim: Plaza de Armas (origen)", "type": "main", "index": 0 }]] },
+    "📍 Nominatim: Plaza de Armas (origen)": { "main": [[{ "node": "📍 Nominatim: Atracción Principal (destino)", "type": "main", "index": 0 }]] },
+    "📍 Nominatim: Atracción Principal (destino)": { "main": [[{ "node": "🛣️ OSRM: Ruta Driving con GeoJSON", "type": "main", "index": 0 }]] },
+    "🛣️ OSRM: Ruta Driving con GeoJSON":    { "main": [[{ "node": "🗺️ staticmap: Render PNG 640×340 sobre OSM", "type": "main", "index": 0 }]] },
+    "🗺️ staticmap: Render PNG 640×340 sobre OSM": { "main": [[{ "node": "✅ Mapa PNG Base64 → jsPDF PDF",   "type": "main", "index": 0 }]] },
+
+    "POST /summary":                         { "main": [[{ "node": "📚 Obtener Mensajes del Chat (Firestore)", "type": "main", "index": 0 }]] },
+    "📚 Obtener Mensajes del Chat (Firestore)": { "main": [[{ "node": "🧠 Mistral AI — Extracción Estructurada JSON", "type": "main", "index": 0 }]] },
+    "🧠 Mistral AI — Extracción Estructurada JSON": { "main": [[{ "node": "📋 Parsear y Validar JSON Estructurado", "type": "main", "index": 0 }]] },
+    "📋 Parsear y Validar JSON Estructurado": { "main": [[{ "node": "✅ JSON Resumen → jsPDF Resumen Ejecutivo", "type": "main", "index": 0 }]] }
+  },
+
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "meta": { "templateCredsSetupCompleted": true, "instanceId": "chatbot-transporte-peru-v23" },
+  "id": "peru-travel-system-v23",
+  "tags": [{ "id": "tag-1", "name": "Viajes Peru", "createdAt": "2026-06-02T00:00:00.000Z", "updatedAt": "2026-06-02T00:00:00.000Z" }]
+}
