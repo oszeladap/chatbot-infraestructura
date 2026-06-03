@@ -2,7 +2,7 @@
 
 Asistente conversacional especializado en viajes dentro del Perú. Permite a los viajeros consultar en tiempo real vuelos, rutas de bus, hospedaje, gastronomía, atracciones turísticas y condiciones climáticas de cualquier ciudad peruana, combinando inteligencia artificial con búsqueda web actualizada, galería fotográfica de destinos y reportes PDF enriquecidos.
 
-> **Desarrollado por Oscar Zelada Pozo** · React 18 + Vite · FastAPI · Mistral AI · Tavily · Firebase · Firestore · Railway · v2.4 — Junio 2026
+> **Desarrollado por Oscar Zelada Pozo** · React 18 + Vite · FastAPI · Mistral AI · Tavily · Firebase · Firestore · Railway · v2.5 — Junio 2026
 
 ---
 
@@ -166,6 +166,20 @@ Archivo HTML autocontenido que renderiza dos diagramas de arquitectura en el nav
 
 > **Nota técnica PNG**: la exportación re-renderiza el diagrama con `htmlLabels: false` para eliminar `<foreignObject>` del SVG y evitar el bloqueo de seguridad `canvas.toDataURL()` en Chromium.
 
+### `manual-usuario.html` — Manual de usuario completo
+
+Documento HTML autocontenido con manual de uso del sistema para los tres roles. Incluye mockups de la interfaz reales (Login, Chat, Galería, PDF, Sidebar, Perfil, Panel de Administración), instrucciones paso a paso, ejemplos de consulta y tabla de solución de problemas.
+
+| Sección | Contenido |
+|---|---|
+| **Roles y Permisos** | Tabla comparativa de los 3 roles: `assistant_user`, `viewer`, `admin` |
+| **Manual Turista** | Chat, galería de imágenes, exportación PDF Detallado y Resumen Ejecutivo, historial de chats, perfil de usuario |
+| **Manual Visualizador** | Acceso de solo lectura, navegación de chats y descargas |
+| **Manual Administrador** | Panel de administración, asignación de roles, eliminación de usuarios |
+| **Solución de Problemas** | 10 problemas comunes con causa y solución |
+
+**Uso**: Abrir `manual-usuario.html` en cualquier navegador. Incluye CSS `@media print` para impresión en A4 portrait. Sin dependencias externas.
+
 ### `n8n-flujo-sistema.json` — Workflow importable en n8n
 
 Representación del flujo del sistema en formato nativo de **n8n** (workflow automation). Se importa directamente en la interfaz web de n8n (`Import from file`) y visualiza los 4 flujos del sistema como nodos conectados con flechas en el canvas de n8n.
@@ -273,6 +287,8 @@ chatbot-infraestructura/
 │                                   #   Exportación PNG (A4, 2× resolución) y SVG vectorial
 ├── n8n-flujo-sistema.json          # Workflow n8n importable — 4 flujos del sistema:
 │                                   #   Chat IA · Galería Imágenes · Mapa Ruta · Resumen PDF
+├── manual-usuario.html             # Manual de usuario con mockups UI para los 3 roles:
+│                                   #   assistant_user · viewer · admin — imprimible en A4
 ├── Dockerfile                      # Build multi-stage: Node (React) → Python (FastAPI)
 ├── railway.toml                    # Config Railway: builder Dockerfile, healthcheck /health
 ├── .dockerignore
@@ -472,13 +488,14 @@ La documentación interactiva Swagger está disponible en `/docs`.
 | | |
 |---|---|
 | **Desarrollador** | Oscar Zelada Pozo |
-| **Versión** | 2.4 — Junio 2026 |
+| **Versión** | 2.5 — Junio 2026 |
 | **Stack principal** | React 18 · FastAPI · Mistral AI · Tavily · Firebase · Firestore · Railway |
 | **Imágenes** | Tavily Image Search — búsqueda dinámica, descarga Base64 server-side |
 | **Mapas y rutas** | OpenStreetMap (Nominatim) + OSRM — datos © OpenStreetMap contributors |
 | **Documentación técnica** | `CASO_DE_USO.md` — estándar UML 2.5 / IEEE 830 / RUP |
 | **Diagramas de arquitectura** | `diagramas.html` — Mermaid, exportación PNG A4 + SVG |
 | **Flujo del sistema** | `n8n-flujo-sistema.json` — workflow importable en n8n |
+| **Manual de usuario** | `manual-usuario.html` — manual completo para los 3 roles con mockups UI |
 
 ---
 

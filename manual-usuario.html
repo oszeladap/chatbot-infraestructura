@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Manual de Usuario — Sistema Inteligente de Viajes de Perú</title>
+<style>
+/* ═══════════════════════════════════════════════════
+   TOKENS
+═══════════════════════════════════════════════════ */
+:root{
+  --blue:#1565A0; --blue-dark:#0d47a1; --blue-light:#e3f2fd;
+  --red:#C41E3A;  --gold:#D4AF37;      --gold-light:#fff8e1;
+  --bg:#0D1B2A;   --gray:#546e7a;      --border:#dde3ea;
+  --green:#1b5e20; --green-light:#e8f5e9;
+  --font:'Segoe UI',Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+
+/* ═══════════════════════════════════════════════════
+   DOCUMENT BASE
+═══════════════════════════════════════════════════ */
+body{font-family:var(--font);font-size:13.5px;color:#1a2332;background:#f5f7fa;line-height:1.6}
+h1{font-size:2rem;color:var(--blue-dark);margin-bottom:.5rem}
+h2{font-size:1.4rem;color:var(--blue);margin:2rem 0 .8rem;padding-bottom:.4rem;border-bottom:2px solid var(--blue-light)}
+h3{font-size:1.1rem;color:var(--blue-dark);margin:1.4rem 0 .5rem}
+h4{font-size:.95rem;color:#37474f;margin:1rem 0 .3rem}
+p{margin:.5rem 0}
+ul,ol{padding-left:1.4rem;margin:.4rem 0}
+li{margin:.25rem 0}
+table{border-collapse:collapse;width:100%;font-size:.88rem;margin:.8rem 0}
+th{background:var(--blue);color:#fff;padding:7px 10px;text-align:left}
+td{border:1px solid var(--border);padding:6px 10px;vertical-align:top}
+tr:nth-child(even) td{background:#f5f7fa}
+code{background:#eceff1;border-radius:4px;padding:2px 6px;font-size:.85rem;font-family:monospace}
+a{color:var(--blue);text-decoration:none}
+
+/* ═══════════════════════════════════════════════════
+   LAYOUT
+═══════════════════════════════════════════════════ */
+.wrap{max-width:960px;margin:0 auto;padding:28px 20px 60px}
+
+/* ═══════════════════════════════════════════════════
+   COVER PAGE
+═══════════════════════════════════════════════════ */
+.cover{
+  background:linear-gradient(145deg,var(--bg) 0%,#1a3a5c 100%);
+  color:#fff;border-radius:16px;padding:60px 48px;text-align:center;margin-bottom:36px;
+  position:relative;overflow:hidden;
+}
+.cover::before{
+  content:'';position:absolute;top:-60px;right:-60px;width:300px;height:300px;
+  background:radial-gradient(circle,rgba(212,175,55,.15) 0%,transparent 70%);
+  border-radius:50%;
+}
+.cover-sun{font-size:4rem;margin-bottom:12px;display:block}
+.cover h1{color:var(--gold);font-size:2.2rem;letter-spacing:.04em;margin-bottom:8px}
+.cover .subtitle{color:#b0c4de;font-size:1rem;margin-bottom:28px}
+.cover-meta{display:flex;justify-content:center;gap:24px;flex-wrap:wrap;margin-top:24px}
+.cover-badge{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);
+  border-radius:8px;padding:8px 18px;font-size:.82rem;color:#cdd;white-space:nowrap}
+
+/* ═══════════════════════════════════════════════════
+   TOC
+═══════════════════════════════════════════════════ */
+.toc{background:#fff;border-radius:12px;padding:28px 32px;margin-bottom:32px;
+  border:1px solid var(--border);box-shadow:0 2px 12px rgba(0,0,0,.06)}
+.toc h2{margin-top:0}
+.toc ol{counter-reset:toc}
+.toc li{margin:.3rem 0}
+.toc a{color:var(--blue-dark);font-size:.9rem}
+.toc a:hover{text-decoration:underline}
+.toc .sub{padding-left:1.2rem;font-size:.85rem;color:#546e7a;margin:.15rem 0}
+
+/* ═══════════════════════════════════════════════════
+   SECTION CARD
+═══════════════════════════════════════════════════ */
+.section{background:#fff;border-radius:12px;padding:28px 32px;margin-bottom:28px;
+  border:1px solid var(--border);box-shadow:0 2px 12px rgba(0,0,0,.05)}
+.section h2{margin-top:0}
+
+/* ═══════════════════════════════════════════════════
+   CALLOUT BOXES
+═══════════════════════════════════════════════════ */
+.note,.tip,.warn{border-radius:8px;padding:12px 16px;margin:12px 0;font-size:.88rem}
+.note{background:#e3f2fd;border-left:4px solid var(--blue)}
+.tip {background:var(--green-light);border-left:4px solid var(--green)}
+.warn{background:#fff3e0;border-left:4px solid #e65100}
+.note b,.tip b,.warn b{display:block;margin-bottom:3px}
+
+/* ═══════════════════════════════════════════════════
+   ROLE BADGES
+═══════════════════════════════════════════════════ */
+.role-badge{display:inline-flex;align-items:center;gap:5px;font-size:.78rem;font-weight:700;
+  padding:3px 10px;border-radius:20px;white-space:nowrap}
+.role-au{background:#e8f5e9;color:#1b5e20;border:1px solid #a5d6a7}
+.role-vi{background:#e3f2fd;color:#0d47a1;border:1px solid #90caf9}
+.role-ad{background:#fce4ec;color:#880e4f;border:1px solid #f48fb1}
+
+/* ═══════════════════════════════════════════════════
+   STEP LIST
+═══════════════════════════════════════════════════ */
+.steps{counter-reset:step;list-style:none;padding:0;margin:.6rem 0}
+.steps li{counter-increment:step;display:flex;gap:12px;margin:.7rem 0;align-items:flex-start}
+.steps li::before{content:counter(step);min-width:26px;height:26px;border-radius:50%;
+  background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;
+  font-size:.8rem;font-weight:700;flex-shrink:0;margin-top:1px}
+
+/* ═══════════════════════════════════════════════════
+   FIGURE / CAPTION
+═══════════════════════════════════════════════════ */
+.fig{margin:18px 0;text-align:center}
+.fig-caption{font-size:.8rem;color:#546e7a;margin-top:6px;font-style:italic}
+.fig-label{display:inline-block;background:var(--blue);color:#fff;
+  font-size:.72rem;font-weight:700;padding:2px 10px;border-radius:4px;margin-bottom:8px}
+
+/* ═══════════════════════════════════════════════════
+   ANNOTATION CALLOUT (numbered dot on mockup)
+═══════════════════════════════════════════════════ */
+.ann{position:relative;display:inline-block;
+  width:20px;height:20px;border-radius:50%;
+  background:var(--red);color:#fff;font-size:.7rem;font-weight:700;
+  text-align:center;line-height:20px;vertical-align:middle;margin:0 3px}
+
+/* ═══════════════════════════════════════════════════
+   ══════════════════════════════════════════════════
+   MOCKUPS — UI reproductions based on actual source
+   ══════════════════════════════════════════════════
+═══════════════════════════════════════════════════ */
+
+/* ── LOGIN MOCKUP ── */
+.mk-login-root{background:linear-gradient(145deg,#0D1B2A,#1a3a5c);
+  padding:32px;border-radius:12px;display:flex;justify-content:center;align-items:center}
+.mk-login-card{background:#fff;border-radius:14px;padding:32px 28px;width:320px;
+  box-shadow:0 8px 32px rgba(0,0,0,.3);text-align:center}
+.mk-login-sun{font-size:2.8rem;margin-bottom:6px}
+.mk-login-title{font-size:1.3rem;font-weight:700;color:var(--blue-dark);margin-bottom:2px}
+.mk-login-sub{font-size:.78rem;color:#78909c;margin-bottom:8px}
+.mk-login-tags{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;
+  font-size:.72rem;color:#546e7a;margin-bottom:14px}
+.mk-btn-google{display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;padding:9px;border:1.5px solid #dde3ea;border-radius:8px;
+  background:#fff;font-size:.85rem;font-weight:600;color:#3c4043;cursor:pointer;margin-bottom:12px}
+.mk-btn-google:hover{background:#f5f7fa}
+.mk-g-circle{width:18px;height:18px;border-radius:50%;
+  background:conic-gradient(#4285F4 90deg,#34A853 90deg 180deg,#FBBC05 180deg 270deg,#EA4335 270deg)}
+.mk-divider{text-align:center;color:#9e9e9e;font-size:.75rem;margin:10px 0;position:relative}
+.mk-divider::before,.mk-divider::after{content:'';position:absolute;top:50%;width:42%;height:1px;background:#e0e0e0}
+.mk-divider::before{left:0}.mk-divider::after{right:0}
+.mk-field-label{display:block;text-align:left;font-size:.75rem;color:#37474f;
+  font-weight:600;margin-bottom:3px;margin-top:10px}
+.mk-field{width:100%;border:1.5px solid #e0e0e0;border-radius:8px;padding:8px 10px;
+  font-size:.85rem;color:#333;background:#fafafa;outline:none}
+.mk-field:focus{border-color:var(--blue);background:#fff}
+.mk-btn-primary{width:100%;padding:10px;border:none;border-radius:8px;
+  background:var(--blue);color:#fff;font-size:.88rem;font-weight:700;cursor:pointer;margin-top:12px}
+.mk-link-toggle{display:block;font-size:.78rem;color:var(--blue);margin-top:10px;cursor:pointer;
+  text-decoration:underline;background:none;border:none}
+.mk-peru-icons{display:flex;justify-content:center;gap:12px;margin-top:16px;flex-wrap:wrap}
+.mk-peru-icon{font-size:.7rem;color:#546e7a;text-align:center}
+.mk-peru-icon span{display:block;font-size:1.1rem}
+
+/* ── CHAT LAYOUT MOCKUP ── */
+.mk-chat-root{background:var(--bg);border-radius:12px;overflow:hidden;
+  display:flex;flex-direction:column;height:520px}
+.mk-chat-header{background:#0a1628;padding:10px 16px;display:flex;
+  align-items:center;justify-content:space-between;flex-shrink:0}
+.mk-chat-header-title{color:var(--gold);font-weight:700;font-size:.95rem;display:flex;gap:8px;align-items:center}
+.mk-chat-header-icons{display:flex;gap:10px}
+.mk-icon-btn{background:rgba(255,255,255,.1);border:none;color:#fff;border-radius:6px;
+  padding:4px 10px;font-size:.75rem;cursor:pointer}
+.mk-body{display:flex;flex:1;overflow:hidden}
+
+/* sidebar */
+.mk-sidebar{width:200px;background:#0a1628;border-right:1px solid rgba(255,255,255,.1);
+  display:flex;flex-direction:column;flex-shrink:0}
+.mk-sidebar-header{padding:10px 12px;color:#90caf9;font-size:.72rem;font-weight:700;
+  text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid rgba(255,255,255,.08)}
+.mk-chat-item{padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer}
+.mk-chat-item.active{background:rgba(21,101,160,.4)}
+.mk-chat-item-date{font-size:.65rem;color:#78909c;margin-bottom:2px}
+.mk-chat-item-prev{font-size:.73rem;color:#b0bec5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mk-new-chat{margin:10px;padding:7px;background:var(--blue);color:#fff;
+  border:none;border-radius:8px;font-size:.75rem;font-weight:700;cursor:pointer;width:calc(100% - 20px)}
+
+/* chat area */
+.mk-chat-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.mk-messages{flex:1;padding:14px;overflow-y:auto;display:flex;flex-direction:column;gap:12px}
+.mk-bubble-wrap{display:flex;flex-direction:column}
+.mk-bubble-wrap.user{align-items:flex-end}
+.mk-bubble-wrap.assistant{align-items:flex-start}
+.mk-bubble{max-width:78%;padding:10px 14px;border-radius:14px;font-size:.83rem;line-height:1.5}
+.mk-bubble.user{background:var(--blue);color:#fff;border-bottom-right-radius:4px}
+.mk-bubble.assistant{background:#fff;color:#1a2332;border:1px solid #e8ecf0;
+  border-bottom-left-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.mk-chip-row{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+.mk-chip{font-size:.65rem;padding:2px 8px;border-radius:12px;font-weight:700}
+.mk-chip.transport{background:#e3f2fd;color:#0d47a1}
+.mk-chip.hostal{background:#e8f5e9;color:#1b5e20}
+.mk-chip.food{background:#fff3e0;color:#e65100}
+.mk-chip.turismo{background:#f3e5f5;color:#6a1b9a}
+.mk-chip.clima{background:#e0f7fa;color:#006064}
+.mk-search-badge{font-size:.62rem;color:#78909c;margin-top:3px;display:flex;align-items:center;gap:3px}
+
+/* gallery */
+.mk-gallery{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:8px}
+.mk-gallery-img{height:68px;border-radius:6px;overflow:hidden;background:#e0e0e0;
+  display:flex;align-items:center;justify-content:center;font-size:1.4rem;color:#9e9e9e}
+
+/* input bar */
+.mk-input-bar{padding:10px 12px;background:#0a1628;display:flex;gap:8px;align-items:center;flex-shrink:0}
+.mk-input{flex:1;background:#1a3a5c;border:1px solid rgba(255,255,255,.15);border-radius:10px;
+  color:#fff;padding:8px 12px;font-size:.83rem;outline:none}
+.mk-send-btn{background:var(--blue);border:none;color:#fff;border-radius:8px;
+  padding:8px 14px;font-size:.78rem;font-weight:700;cursor:pointer}
+.mk-pdf-btns{display:flex;gap:6px;padding:6px 12px 8px;background:#0a1628}
+.mk-pdf-btn{flex:1;padding:5px 8px;border:none;border-radius:7px;
+  font-size:.72rem;font-weight:700;cursor:pointer}
+.mk-pdf-btn.detail{background:#c41e3a;color:#fff}
+.mk-pdf-btn.exec{background:#1565A0;color:#fff}
+
+/* ── ADMIN MOCKUP ── */
+.mk-admin-root{background:#f5f7fa;border-radius:12px;overflow:hidden;border:1px solid var(--border)}
+.mk-admin-header{background:var(--blue-dark);padding:14px 20px;color:#fff;font-weight:700;font-size:.95rem}
+.mk-admin-toolbar{padding:10px 16px;display:flex;gap:8px;background:#fff;border-bottom:1px solid var(--border)}
+.mk-admin-search{flex:1;padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:.82rem}
+.mk-admin-filter{padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:.82rem;background:#fff}
+.mk-user-row{display:flex;align-items:center;gap:10px;padding:10px 16px;
+  border-bottom:1px solid var(--border);background:#fff;font-size:.83rem}
+.mk-user-row:hover{background:#f5f7fa}
+.mk-user-avatar{width:34px;height:34px;border-radius:50%;background:var(--blue);
+  color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;
+  font-size:.85rem;flex-shrink:0}
+.mk-user-info{flex:1;min-width:0}
+.mk-user-name{font-weight:600;color:#1a2332;font-size:.82rem}
+.mk-user-email{font-size:.72rem;color:#78909c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mk-role-select{padding:4px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:.78rem;background:#fff}
+.mk-btn-apply{padding:4px 12px;background:var(--green);color:#fff;border:none;
+  border-radius:6px;font-size:.75rem;font-weight:700;cursor:pointer}
+.mk-btn-del{padding:4px 10px;background:#fff;color:var(--red);border:1.5px solid var(--red);
+  border-radius:6px;font-size:.75rem;font-weight:700;cursor:pointer}
+.mk-toast{background:#1b5e20;color:#fff;padding:8px 16px;border-radius:8px;
+  font-size:.78rem;text-align:center;margin:8px 16px}
+
+/* ── PROFILE MOCKUP ── */
+.mk-profile-card{background:#fff;border:1px solid var(--border);border-radius:12px;
+  padding:20px;max-width:380px}
+.mk-profile-name{font-size:1rem;font-weight:700;color:var(--blue-dark);margin-bottom:2px}
+.mk-profile-email{font-size:.78rem;color:#78909c;margin-bottom:14px}
+.mk-pref-chip{display:inline-block;background:var(--blue-light);color:var(--blue-dark);
+  border-radius:12px;padding:2px 10px;font-size:.72rem;margin:2px}
+.mk-profile-field{margin-bottom:10px}
+.mk-profile-field label{display:block;font-size:.73rem;color:#546e7a;font-weight:600;margin-bottom:3px}
+.mk-profile-field .val{font-size:.85rem;color:#1a2332}
+
+/* ── ANNOTATIONS ON MOCKUP ── */
+.mockup-wrapper{position:relative;display:inline-block;width:100%}
+.dot{position:absolute;width:22px;height:22px;background:var(--red);color:#fff;
+  border-radius:50%;font-size:.72rem;font-weight:700;display:flex;align-items:center;
+  justify-content:center;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);
+  cursor:default;z-index:10}
+
+/* ═══════════════════════════════════════════════════
+   PRINT
+═══════════════════════════════════════════════════ */
+@media print{
+  @page{size:A4 portrait;margin:15mm 12mm}
+  body{background:#fff;font-size:12px}
+  .cover{break-after:page;-webkit-print-color-adjust:exact;print-color-adjust:exact;
+    background:#0D1B2A!important}
+  .toc{break-after:page}
+  .section{break-inside:avoid;box-shadow:none;border:1px solid #ddd}
+  h2{break-before:auto}
+  .mk-chat-root,.mk-login-root,.mk-admin-root{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ═══════════════════════════
+     PORTADA
+════════════════════════════ -->
+<div class="cover" id="portada">
+  <span class="cover-sun">🌞</span>
+  <h1>Sistema Inteligente de Viajes de Perú</h1>
+  <p class="subtitle">Manual de Usuario — Guía completa por roles</p>
+  <hr style="border:none;border-top:1px solid rgba(255,255,255,.2);margin:20px 0"/>
+  <p style="color:#b0c4de;font-size:.92rem;max-width:520px;margin:0 auto">
+    Asistente conversacional de IA especializado en viajes dentro del Perú.<br/>
+    Vuelos · Buses · Trenes · Hospedaje · Gastronomía · Turismo · Clima
+  </p>
+  <div class="cover-meta">
+    <div class="cover-badge">📅 Versión 2.4 — Junio 2026</div>
+    <div class="cover-badge">👤 Oscar Zelada Pozo</div>
+    <div class="cover-badge">🌐 React 18 · FastAPI · Mistral AI</div>
+    <div class="cover-badge">🚀 Railway Cloud</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════
+     TABLA DE CONTENIDO
+════════════════════════════ -->
+<div class="toc" id="toc">
+  <h2>📋 Tabla de Contenido</h2>
+  <ol>
+    <li><a href="#intro">Introducción al Sistema</a></li>
+    <li><a href="#roles">Roles y Permisos</a></li>
+    <li><a href="#acceso">Acceso al Sistema</a>
+      <div class="sub"><a href="#login-google">3.1 Iniciar sesión con Google</a></div>
+      <div class="sub"><a href="#login-email">3.2 Iniciar sesión con Correo y Contraseña</a></div>
+      <div class="sub"><a href="#registro">3.3 Crear nueva cuenta</a></div>
+    </li>
+    <li><a href="#manual-au">Manual del Turista / Viajero</a> <span class="role-badge role-au">assistant_user</span>
+      <div class="sub"><a href="#pantalla-chat">4.1 Pantalla principal de chat</a></div>
+      <div class="sub"><a href="#consultas">4.2 Cómo hacer consultas</a></div>
+      <div class="sub"><a href="#galeria">4.3 Galería fotográfica de destinos</a></div>
+      <div class="sub"><a href="#pdf-detallado">4.4 Exportar PDF Detallado</a></div>
+      <div class="sub"><a href="#pdf-resumen">4.5 Exportar Resumen Ejecutivo IA</a></div>
+      <div class="sub"><a href="#historial">4.6 Gestión del historial de chats</a></div>
+      <div class="sub"><a href="#perfil">4.7 Perfil de usuario</a></div>
+    </li>
+    <li><a href="#manual-vi">Manual del Visualizador</a> <span class="role-badge role-vi">viewer</span></li>
+    <li><a href="#manual-ad">Manual del Administrador</a> <span class="role-badge role-ad">admin</span>
+      <div class="sub"><a href="#admin-panel">6.1 Panel de administración</a></div>
+      <div class="sub"><a href="#admin-roles">6.2 Asignar y cambiar roles</a></div>
+      <div class="sub"><a href="#admin-delete">6.3 Eliminar usuarios</a></div>
+    </li>
+    <li><a href="#ejemplos">Ejemplos de consultas</a></li>
+    <li><a href="#problemas">Solución de problemas</a></li>
+  </ol>
+</div>
+
+<!-- ═══════════════════════════
+     1. INTRODUCCIÓN
+════════════════════════════ -->
+<div class="section" id="intro">
+  <h2>1. Introducción al Sistema</h2>
+  <p>El <strong>Sistema Inteligente de Viajes de Perú</strong> es un asistente conversacional impulsado por inteligencia artificial que brinda información actualizada sobre todos los aspectos de un viaje dentro del territorio peruano.</p>
+  <p>A diferencia de motores de búsqueda convencionales, el sistema combina un modelo de lenguaje avanzado (<strong>Mistral AI</strong>) con búsqueda web en tiempo real (<strong>Tavily</strong>) para ofrecer respuestas estructuradas, comparativas de precios vigentes y condiciones climáticas actuales.</p>
+
+  <h3>¿Qué puede hacer el sistema?</h3>
+  <table>
+    <tr><th>Módulo</th><th>Ejemplos de información</th></tr>
+    <tr><td>✈️ <strong>Transporte Aéreo</strong></td><td>Vuelos Lima–Cusco, tarifas LATAM / Sky / Avianca / JetSmart, horarios</td></tr>
+    <tr><td>🚌 <strong>Transporte Terrestre</strong></td><td>Buses Cruz del Sur, Oltursa, Tepsa, Civa; rutas, horarios y terminales</td></tr>
+    <tr><td>🚂 <strong>Trenes Turísticos</strong></td><td>PeruRail, Inca Rail, ruta Cusco–Machu Picchu, Andean Explorer</td></tr>
+    <tr><td>🏨 <strong>Hospedaje</strong></td><td>Hoteles y hostales por ciudad, rangos de precio, alternativas económicas y premium</td></tr>
+    <tr><td>🍽️ <strong>Gastronomía</strong></td><td>Restaurantes típicos, precio de menú, Uber, taxi y transporte local</td></tr>
+    <tr><td>🗺️ <strong>Turismo</strong></td><td>Museos, ruinas, miradores, tours guiados y costos de entrada</td></tr>
+    <tr><td>☁️ <strong>Clima</strong></td><td>Temperatura, precipitaciones y recomendaciones de vestimenta para cualquier ciudad y fecha</td></tr>
+    <tr><td>📸 <strong>Galería</strong></td><td>Hasta 6 fotos dinámicas del destino: ciudad, turismo, gastronomía y alojamiento</td></tr>
+    <tr><td>📄 <strong>PDF</strong></td><td>Reporte detallado por secciones o resumen ejecutivo de 2 páginas generado por IA</td></tr>
+  </table>
+
+  <div class="note"><b>ℹ️ Nota importante</b>El sistema es un <em>asistente informativo</em>. No realiza reservas, ventas de pasajes ni pagos en línea.</div>
+</div>
+
+<!-- ═══════════════════════════
+     2. ROLES
+════════════════════════════ -->
+<div class="section" id="roles">
+  <h2>2. Roles y Permisos</h2>
+  <p>El sistema utiliza tres roles con distintos niveles de acceso:</p>
+  <table>
+    <tr>
+      <th>Rol</th><th>Chat</th><th>Historial</th><th>PDF</th><th>Perfil</th><th>Admin</th>
+    </tr>
+    <tr>
+      <td><span class="role-badge role-au">assistant_user</span> Turista</td>
+      <td>✅ Enviar y recibir</td><td>✅ Ver y borrar el propio</td>
+      <td>✅ Generar</td><td>✅ Ver y editar</td><td>❌</td>
+    </tr>
+    <tr>
+      <td><span class="role-badge role-vi">viewer</span> Visualizador</td>
+      <td>❌ Solo lectura</td><td>✅ Ver (propio)</td>
+      <td>❌</td><td>✅ Ver</td><td>❌</td>
+    </tr>
+    <tr>
+      <td><span class="role-badge role-ad">admin</span> Administrador</td>
+      <td>✅ Completo</td><td>✅ Ver cualquier usuario</td>
+      <td>✅ Generar</td><td>✅ Ver y editar</td><td>✅ Completo</td>
+    </tr>
+  </table>
+
+  <div class="warn"><b>⚠️ Sin rol asignado</b>Si un usuario se registra pero no tiene rol asignado aún, el sistema le mostrará un mensaje de acceso denegado (403). Un administrador debe asignarle el rol correspondiente desde el Panel de Administración.</div>
+</div>
+
+<!-- ═══════════════════════════
+     3. ACCESO
+════════════════════════════ -->
+<div class="section" id="acceso">
+  <h2>3. Acceso al Sistema</h2>
+  <p>La pantalla de inicio permite ingresar de dos formas: <strong>Google OAuth</strong> (recomendado) o <strong>correo electrónico + contraseña</strong>.</p>
+
+  <!-- Login mockup -->
+  <div class="fig">
+    <div class="fig-label">Figura 1 — Pantalla de Inicio de Sesión</div>
+    <div class="mk-login-root">
+      <div style="position:relative;display:inline-block">
+        <div class="mk-login-card">
+          <div class="mk-login-sun">☀️</div>
+          <div class="mk-login-title">Transporte Perú</div>
+          <div class="mk-login-sub">Asistente inteligente de viajes</div>
+          <div class="mk-login-tags">✈ Vuelos · 🚌 Buses · 🚂 Trenes · 🌤 Clima</div>
+          <button class="mk-btn-google">
+            <div class="mk-g-circle"></div>
+            Continuar con Google
+          </button>
+          <div class="mk-divider">o</div>
+          <label class="mk-field-label">Correo electrónico</label>
+          <input class="mk-field" type="email" placeholder="tu@correo.com" readonly/>
+          <label class="mk-field-label">Contraseña</label>
+          <input class="mk-field" type="password" placeholder="••••••••" readonly/>
+          <button class="mk-btn-primary">Ingresar</button>
+          <button class="mk-link-toggle">¿No tienes cuenta? Regístrate</button>
+          <div class="mk-peru-icons">
+            <div class="mk-peru-icon"><span>🗿</span>Machu Picchu</div>
+            <div class="mk-peru-icon"><span>🌊</span>Paracas</div>
+            <div class="mk-peru-icon"><span>🌿</span>Amazonía</div>
+            <div class="mk-peru-icon"><span>🏔</span>Andes</div>
+            <div class="mk-peru-icon"><span>🏙</span>Lima</div>
+          </div>
+        </div>
+        <div class="dot" style="top:88px;right:-12px">1</div>
+        <div class="dot" style="top:128px;right:-12px">2</div>
+        <div class="dot" style="top:188px;right:-12px">3</div>
+        <div class="dot" style="top:262px;right:-12px">4</div>
+      </div>
+    </div>
+    <p class="fig-caption">
+      <span class="ann">1</span> Logo Inti (Sol inca) y título del sistema &nbsp;
+      <span class="ann">2</span> Botón Google OAuth (método recomendado) &nbsp;
+      <span class="ann">3</span> Formulario Email / Contraseña &nbsp;
+      <span class="ann">4</span> Íconos de destinos del Perú
+    </p>
+  </div>
+
+  <h3 id="login-google">3.1 Iniciar sesión con Google <span class="role-badge role-au">assistant_user</span> <span class="role-badge role-vi">viewer</span> <span class="role-badge role-ad">admin</span></h3>
+  <ol class="steps">
+    <li>Haz clic en el botón azul <strong>"Continuar con Google"</strong>.</li>
+    <li>Se abrirá una ventana emergente de Google. Selecciona tu cuenta de Gmail.</li>
+    <li>Acepta los permisos solicitados (solo lectura del perfil básico).</li>
+    <li>Si tu cuenta ya tiene un rol asignado, accederás directamente al chat.</li>
+    <li>Si es la primera vez, espera a que un administrador te asigne un rol.</li>
+  </ol>
+  <div class="tip"><b>✅ Recomendado</b>El login con Google es más rápido, seguro y no requiere recordar contraseñas. Usa la misma cuenta Gmail institucional o personal.</div>
+
+  <h3 id="login-email">3.2 Iniciar sesión con Correo y Contraseña <span class="role-badge role-au">assistant_user</span> <span class="role-badge role-vi">viewer</span> <span class="role-badge role-ad">admin</span></h3>
+  <ol class="steps">
+    <li>Escribe tu <strong>correo electrónico</strong> en el campo correspondiente.</li>
+    <li>Escribe tu <strong>contraseña</strong> (mínimo 6 caracteres).</li>
+    <li>Haz clic en <strong>"Ingresar"</strong>.</li>
+    <li>Si los datos son correctos, ingresarás al sistema.</li>
+  </ol>
+
+  <h3 id="registro">3.3 Crear nueva cuenta</h3>
+  <ol class="steps">
+    <li>En la pantalla de login, haz clic en <strong>"¿No tienes cuenta? Regístrate"</strong>.</li>
+    <li>Aparecerá un campo adicional: <strong>Nombre completo</strong>. Ingrésalo.</li>
+    <li>Completa el correo y crea una contraseña (mínimo 6 caracteres).</li>
+    <li>Haz clic en <strong>"Crear cuenta"</strong>.</li>
+    <li>Tu cuenta se crea, pero <strong>sin rol activo</strong>. Contacta al administrador para que te asigne el rol <code>assistant_user</code>.</li>
+  </ol>
+
+  <table>
+    <tr><th>Mensaje de error</th><th>Causa</th><th>Solución</th></tr>
+    <tr><td>Credenciales incorrectas</td><td>Correo o contraseña equivocados</td><td>Verificar datos o usar "Continuar con Google"</td></tr>
+    <tr><td>Ya existe una cuenta con ese correo</td><td>El email ya está registrado</td><td>Hacer login en lugar de registrarse</td></tr>
+    <tr><td>La contraseña debe tener al menos 6 caracteres</td><td>Contraseña muy corta</td><td>Usar contraseña más larga</td></tr>
+    <tr><td>Demasiados intentos. Espera unos minutos.</td><td>Bloqueo temporal de seguridad</td><td>Esperar 5–10 minutos</td></tr>
+    <tr><td>Error de red</td><td>Sin conexión a internet</td><td>Verificar conexión</td></tr>
+  </table>
+</div>
+
+<!-- ═══════════════════════════
+     4. MANUAL TURISTA
+════════════════════════════ -->
+<div class="section" id="manual-au">
+  <h2>4. Manual del Turista / Viajero <span class="role-badge role-au">assistant_user</span></h2>
+  <p>El rol <code>assistant_user</code> es el rol principal del sistema. Permite usar todas las funcionalidades de consulta, chat, galerías y exportación PDF.</p>
+
+  <!-- PANTALLA PRINCIPAL MOCKUP -->
+  <h3 id="pantalla-chat">4.1 Pantalla principal de chat</h3>
+
+  <div class="fig">
+    <div class="fig-label">Figura 2 — Interfaz Principal de Chat</div>
+    <div style="position:relative">
+      <div class="mk-chat-root">
+        <!-- Header -->
+        <div class="mk-chat-header">
+          <div class="mk-chat-header-title">☀️ &nbsp;Sistema de Viajes Perú</div>
+          <div class="mk-chat-header-icons">
+            <button class="mk-icon-btn">ℹ</button>
+            <button class="mk-icon-btn">👤 Ana García</button>
+            <button class="mk-icon-btn">Salir</button>
+          </div>
+        </div>
+        <!-- Body -->
+        <div class="mk-body">
+          <!-- Sidebar -->
+          <div class="mk-sidebar">
+            <div class="mk-sidebar-header">Mis chats</div>
+            <button class="mk-new-chat">＋ Nuevo Chat</button>
+            <div class="mk-chat-item active">
+              <div class="mk-chat-item-date">03 Jun · 10:22</div>
+              <div class="mk-chat-item-prev">¿Vuelos a Cusco este finde?</div>
+            </div>
+            <div class="mk-chat-item">
+              <div class="mk-chat-item-date">02 Jun · 18:45</div>
+              <div class="mk-chat-item-prev">Hoteles en Arequipa económ…</div>
+            </div>
+            <div class="mk-chat-item">
+              <div class="mk-chat-item-date">01 Jun · 09:10</div>
+              <div class="mk-chat-item-prev">Clima en Machu Picchu julio</div>
+            </div>
+          </div>
+          <!-- Chat area -->
+          <div class="mk-chat-area">
+            <div class="mk-messages">
+              <div class="mk-bubble-wrap user">
+                <div class="mk-bubble user">¿Cuánto cuesta un vuelo de Lima a Cusco este fin de semana?</div>
+              </div>
+              <div class="mk-bubble-wrap assistant">
+                <div class="mk-bubble assistant">
+                  <strong>✈️ Vuelos Lima → Cusco</strong><br/>
+                  <small>LATAM: desde <strong>S/ 189</strong> · Sky: desde <strong>S/ 165</strong></small><br/>
+                  <small>JetSmart: desde <strong>S/ 149</strong> · Star Perú: desde <strong>S/ 159</strong></small><br/><br/>
+                  <small>☁️ <strong>Clima en Cusco este fin de semana:</strong> 8–18°C, despejado. Llevar ropa de abrigo.</small>
+                </div>
+                <div class="mk-chip-row">
+                  <span class="mk-chip transport">✈️ Transporte</span>
+                  <span class="mk-chip clima">☁️ Clima</span>
+                </div>
+                <div class="mk-search-badge">🔍 Datos actualizados con búsqueda web</div>
+                <div class="mk-gallery">
+                  <div class="mk-gallery-img">🏔</div>
+                  <div class="mk-gallery-img">🗿</div>
+                  <div class="mk-gallery-img">🌄</div>
+                  <div class="mk-gallery-img">🏨</div>
+                </div>
+              </div>
+            </div>
+            <div class="mk-pdf-btns">
+              <button class="mk-pdf-btn detail">📑 PDF</button>
+              <button class="mk-pdf-btn exec">📋 Resumen ✓</button>
+            </div>
+            <div class="mk-input-bar">
+              <input class="mk-input" placeholder="Escribe tu consulta sobre viajes en Perú…" readonly/>
+              <button class="mk-send-btn">Enviar ➤</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="dot" style="top:6px;left:6px">1</div>
+      <div class="dot" style="top:6px;right:140px">2</div>
+      <div class="dot" style="top:52px;left:6px">3</div>
+      <div class="dot" style="top:52px;left:210px">4</div>
+      <div class="dot" style="top:220px;left:210px">5</div>
+      <div class="dot" style="top:320px;left:210px">6</div>
+      <div class="dot" style="top:430px;left:210px">7</div>
+      <div class="dot" style="top:460px;left:210px">8</div>
+    </div>
+    <p class="fig-caption">
+      <span class="ann">1</span> Logo y título del sistema &nbsp;
+      <span class="ann">2</span> Botón ℹ (Acerca de), nombre de usuario y Salir &nbsp;
+      <span class="ann">3</span> Sidebar: lista de chats anteriores y botón Nuevo Chat &nbsp;
+      <span class="ann">4</span> Área de mensajes &nbsp;
+      <span class="ann">5</span> Chips temáticos y badge 🔍 cuando se usa búsqueda web &nbsp;
+      <span class="ann">6</span> Galería fotográfica del destino (4 fotos) &nbsp;
+      <span class="ann">7</span> Botones de exportación PDF &nbsp;
+      <span class="ann">8</span> Campo de texto y botón Enviar
+    </p>
+  </div>
+
+  <!-- CONSULTAS -->
+  <h3 id="consultas">4.2 Cómo hacer consultas</h3>
+  <ol class="steps">
+    <li>Haz clic en el campo de texto en la parte inferior de la pantalla.</li>
+    <li>Escribe tu pregunta en lenguaje natural (en español).</li>
+    <li>Presiona <strong>Enter</strong> o haz clic en el botón <strong>Enviar ➤</strong>.</li>
+    <li>El asistente responderá con información estructurada en segundos.</li>
+    <li>Si aparece el badge <strong>🔍</strong>, significa que la respuesta usa datos actualizados de la web.</li>
+  </ol>
+
+  <h4>Tipos de chips temáticos</h4>
+  <p>Cada respuesta muestra automáticamente un chip que identifica el tema:</p>
+  <table>
+    <tr><th>Chip</th><th>Tema</th></tr>
+    <tr><td><span class="mk-chip transport" style="display:inline-block;padding:3px 10px;border-radius:12px">✈️ Transporte</span></td><td>Vuelos, buses, trenes, rutas</td></tr>
+    <tr><td><span class="mk-chip hostal" style="display:inline-block;padding:3px 10px;border-radius:12px">🏨 Hospedaje</span></td><td>Hoteles, hostales, alojamientos</td></tr>
+    <tr><td><span class="mk-chip food" style="display:inline-block;padding:3px 10px;border-radius:12px">🍽️ Alimentación</span></td><td>Restaurantes, precios, menú del día</td></tr>
+    <tr><td><span class="mk-chip turismo" style="display:inline-block;padding:3px 10px;border-radius:12px">🗺️ Turismo</span></td><td>Atracciones, museos, tours</td></tr>
+    <tr><td><span class="mk-chip clima" style="display:inline-block;padding:3px 10px;border-radius:12px">☁️ Clima</span></td><td>Temperatura, lluvia, temporadas</td></tr>
+  </table>
+
+  <div class="tip"><b>💡 Consejo para mejores respuestas</b>Incluye el origen y destino, fechas aproximadas y qué tipo de servicio buscas. Ejemplo: <em>"Voy de Lima a Arequipa el próximo sábado, ¿cuánto cuesta el bus con Cruz del Sur y cómo está el clima allá?"</em></div>
+
+  <!-- GALERÍA -->
+  <h3 id="galeria">4.3 Galería fotográfica de destinos</h3>
+  <p>Tras cada respuesta del asistente que mencione un destino, el sistema muestra automáticamente <strong>hasta 4 fotografías</strong> del lugar en formato cuadrícula 2×2.</p>
+
+  <div class="fig">
+    <div class="fig-label">Figura 3 — Galería de Imágenes del Destino</div>
+    <div style="background:#1a2332;padding:16px;border-radius:10px;max-width:420px;margin:0 auto">
+      <div style="color:#90caf9;font-size:.78rem;margin-bottom:8px">📸 Fotos de Cusco</div>
+      <div class="mk-gallery" style="gap:6px">
+        <div class="mk-gallery-img" style="height:100px;background:#2d4a6b;color:#90caf9;font-size:2rem">🏔</div>
+        <div class="mk-gallery-img" style="height:100px;background:#2d4a6b;color:#90caf9;font-size:2rem">🗿</div>
+        <div class="mk-gallery-img" style="height:100px;background:#2d4a6b;color:#90caf9;font-size:2rem">🍽️</div>
+        <div class="mk-gallery-img" style="height:100px;background:#2d4a6b;color:#90caf9;font-size:2rem">🏨</div>
+      </div>
+      <div style="color:#546e7a;font-size:.68rem;margin-top:6px;text-align:center">Ciudad · Turismo · Gastronomía · Hospedaje</div>
+    </div>
+    <p class="fig-caption">Las imágenes son obtenidas dinámicamente con Tavily Image Search y servidas como Base64 desde el servidor, sin restricciones de carga.</p>
+  </div>
+
+  <ul>
+    <li>La galería aparece <strong>automáticamente</strong> tras cada respuesta del asistente.</li>
+    <li>Las imágenes son <strong>siempre actuales</strong>; no hay listas estáticas.</li>
+    <li>Primera carga de un destino: ~8-14 segundos. Siguiente consulta al mismo destino: ~1-2 segundos (caché 24h).</li>
+  </ul>
+
+  <!-- PDF DETALLADO -->
+  <h3 id="pdf-detallado">4.4 Exportar PDF Detallado</h3>
+  <p>Genera un reporte completo con todo el contenido de la conversación, organizado por secciones temáticas.</p>
+
+  <div class="fig">
+    <div class="fig-label">Figura 4 — Botones de Exportación PDF</div>
+    <div style="background:#0a1628;padding:14px 20px;border-radius:10px;display:flex;gap:10px;max-width:360px;margin:0 auto">
+      <button class="mk-pdf-btn detail" style="flex:1;padding:10px;font-size:.88rem">📑 PDF</button>
+      <button class="mk-pdf-btn exec" style="flex:1;padding:10px;font-size:.88rem">📋 Resumen ✓</button>
+    </div>
+    <p class="fig-caption">El botón <strong>PDF</strong> genera el reporte detallado. El botón <strong>Resumen ✓</strong> descarga el resumen ejecutivo (✓ indica que está listo en caché).</p>
+  </div>
+
+  <ol class="steps">
+    <li>Después de tener al menos un intercambio en el chat, haz clic en el botón <strong>"📑 PDF"</strong>.</li>
+    <li>El botón mostrará <strong>"Generando…"</strong> durante el proceso (puede tomar 10–30 segundos dependiendo del contenido).</li>
+    <li>Se descargará automáticamente un archivo con nombre inteligente:<br/><code>Detalle_viaje_Lima_Cusco_03-06-2026.pdf</code></li>
+  </ol>
+
+  <h4>Contenido del PDF Detallado:</h4>
+  <ul>
+    <li><strong>Portada</strong> — Fondo azul/dorado peruano, título, fecha, hora y usuario</li>
+    <li><strong>Sección ✈️ Transporte</strong> — Vuelos y buses comparados</li>
+    <li><strong>Sección ☁️ Clima</strong> — Condiciones del destino</li>
+    <li><strong>Sección 🏨 Hospedaje</strong> — Opciones y precios</li>
+    <li><strong>Sección 🍽️ Alimentación</strong> — Gastronomía y transporte local</li>
+    <li><strong>Sección 🗺️ Turismo</strong> — Lugares y costos de entrada</li>
+    <li><strong>Galería fotográfica</strong> — Hasta 6 fotos del destino</li>
+    <li><strong>Mapa de ruta</strong> — Plaza de Armas → Atracción principal con distancia y pasos</li>
+    <li><strong>Pie de página</strong> — Número de página y nombre del sistema en cada hoja</li>
+  </ul>
+
+  <div class="note"><b>ℹ️ Nombre inteligente del archivo</b>El origen del PDF se obtiene por geolocalización del navegador (Nominatim). El destino se detecta automáticamente de la conversación. Si el navegador solicita permiso de ubicación al cargar el sistema, acéptalo para que el nombre del archivo sea preciso.</div>
+
+  <!-- PDF RESUMEN -->
+  <h3 id="pdf-resumen">4.5 Exportar Resumen Ejecutivo IA</h3>
+  <p>Genera un documento condensado de <strong>máximo 2 páginas</strong>, ideal para imprimir y llevar de referencia rápida durante el viaje.</p>
+
+  <ol class="steps">
+    <li>Haz clic en el botón <strong>"📋 Resumen ✓"</strong>.</li>
+    <li>Si el ícono muestra <strong>✓</strong>, el resumen ya está listo y la descarga es instantánea.</li>
+    <li>Si no muestra ✓, espera unos segundos mientras Mistral AI lo genera.</li>
+    <li>Se descargará: <code>Resumen_viaje_Lima_Cusco_03-06-2026.pdf</code></li>
+  </ol>
+
+  <h4>Estructura del Resumen Ejecutivo:</h4>
+  <table>
+    <tr><th>Sección</th><th>Contenido</th></tr>
+    <tr><td>Franja de destino</td><td>Nombre del destino en fondo azul oscuro con texto dorado</td></tr>
+    <tr><td>Columna izquierda</td><td>Condiciones climáticas: temperatura, descripción, ropa recomendada</td></tr>
+    <tr><td>Columna derecha</td><td>Lugares sugeridos del destino (hasta 7 lugares)</td></tr>
+    <tr><td>Tabla de costos</td><td>Transporte, hospedaje, alimentación y tours — opción económica vs. cómoda en S/.</td></tr>
+    <tr><td>Consejos prácticos</td><td>Recomendaciones para el viajero (hasta 5 consejos)</td></tr>
+    <tr><td>Galería</td><td>Fotos del destino en Base64 (sin restricciones CORS)</td></tr>
+  </table>
+
+  <div class="tip"><b>💡 Pre-generado automáticamente</b>El Resumen Ejecutivo se genera automáticamente después de cada respuesta del asistente. Cuando el botón muestra <strong>✓</strong>, la descarga es instantánea sin esperar procesamiento.</div>
+
+  <!-- HISTORIAL -->
+  <h3 id="historial">4.6 Gestión del historial de chats</h3>
+
+  <div class="fig">
+    <div class="fig-label">Figura 5 — Sidebar con Historial de Chats</div>
+    <div style="background:#0a1628;border-radius:10px;overflow:hidden;max-width:220px;margin:0 auto">
+      <div class="mk-sidebar-header" style="padding:10px 14px">Mis chats</div>
+      <button class="mk-new-chat">＋ Nuevo Chat</button>
+      <div class="mk-chat-item active" style="padding:10px 14px">
+        <div class="mk-chat-item-date">03 Jun · 10:22</div>
+        <div class="mk-chat-item-prev">¿Vuelos a Cusco este fin de semana?</div>
+      </div>
+      <div class="mk-chat-item" style="padding:10px 14px">
+        <div class="mk-chat-item-date">02 Jun · 18:45</div>
+        <div class="mk-chat-item-prev">Hoteles en Arequipa económ…</div>
+      </div>
+      <div class="mk-chat-item" style="padding:10px 14px">
+        <div class="mk-chat-item-date">01 Jun · 09:10</div>
+        <div class="mk-chat-item-prev">Clima en Machu Picchu julio</div>
+      </div>
+    </div>
+    <p class="fig-caption">El Sidebar muestra todos los chats anteriores con fecha, hora y vista previa del primer mensaje.</p>
+  </div>
+
+  <table>
+    <tr><th>Acción</th><th>Cómo hacerla</th></tr>
+    <tr><td>Iniciar nuevo chat</td><td>Clic en <strong>"＋ Nuevo Chat"</strong> en el sidebar. El chat anterior se guarda automáticamente.</td></tr>
+    <tr><td>Retomar un chat anterior</td><td>Clic en cualquier chat de la lista del sidebar. El historial completo se cargará.</td></tr>
+    <tr><td>Auto-guardado</td><td>Cada mensaje se guarda automáticamente en Firestore. No hay botón de guardado manual.</td></tr>
+    <tr><td>Eliminar un chat</td><td>Desde dentro del chat, usa el menú de opciones (ícono ⋮) y selecciona "Eliminar chat".</td></tr>
+  </table>
+
+  <!-- PERFIL -->
+  <h3 id="perfil">4.7 Perfil de usuario</h3>
+  <div class="fig">
+    <div class="fig-label">Figura 6 — Perfil de Usuario</div>
+    <div style="display:flex;justify-content:center">
+      <div class="mk-profile-card">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+          <div class="mk-user-avatar" style="width:46px;height:46px;font-size:1.1rem">AG</div>
+          <div>
+            <div class="mk-profile-name">Ana García</div>
+            <div class="mk-profile-email">ana.garcia@gmail.com</div>
+          </div>
+        </div>
+        <div class="mk-profile-field">
+          <label>Rol</label>
+          <span class="role-badge role-au">assistant_user</span>
+        </div>
+        <div class="mk-profile-field">
+          <label>Preferencias de viaje</label>
+          <span class="mk-pref-chip">Cusco</span>
+          <span class="mk-pref-chip">Machu Picchu</span>
+          <span class="mk-pref-chip">Aventura</span>
+        </div>
+        <div class="mk-profile-field">
+          <label>Notas</label>
+          <div class="val">Viajero frecuente. Prefiero bus cama nocturno para rutas largas.</div>
+        </div>
+        <div class="mk-profile-field">
+          <label>Último ingreso</label>
+          <div class="val">03 de junio de 2026, 10:22</div>
+        </div>
+      </div>
+    </div>
+    <p class="fig-caption">El perfil muestra nombre, email, rol, preferencias personalizadas y notas libres.</p>
+  </div>
+
+  <p>Para acceder al perfil: clic en tu <strong>nombre de usuario</strong> en la cabecera → <strong>Mi Perfil</strong>. Puedes editar:</p>
+  <ul>
+    <li><strong>Nombre</strong> — cómo te llamará el sistema</li>
+    <li><strong>Preferencias de viaje</strong> — destinos o temas favoritos (Cusco, playa, aventura, etc.)</li>
+    <li><strong>Notas</strong> — información personal que el sistema puede considerar</li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════
+     5. MANUAL VIEWER
+════════════════════════════ -->
+<div class="section" id="manual-vi">
+  <h2>5. Manual del Visualizador <span class="role-badge role-vi">viewer</span></h2>
+  <p>El rol <code>viewer</code> tiene acceso de solo lectura al historial de conversaciones. <strong>No puede enviar mensajes al asistente ni generar PDFs.</strong></p>
+
+  <h3>¿Qué puede hacer un Visualizador?</h3>
+  <ul>
+    <li>✅ Ver el historial de sus propios chats anteriores desde el sidebar</li>
+    <li>✅ Ver su perfil de usuario</li>
+    <li>❌ No puede escribir en el campo de chat (aparece deshabilitado)</li>
+    <li>❌ No puede generar PDF ni Resumen Ejecutivo</li>
+    <li>❌ No puede acceder al Panel de Administración</li>
+  </ul>
+
+  <div class="warn">
+    <b>⚠️ Campo de chat bloqueado</b>
+    Si ves el campo de texto atenuado (gris) con el mensaje "Solo lectura — rol viewer", significa que tu cuenta tiene el rol <code>viewer</code>. Contacta al administrador si necesitas acceso completo (<code>assistant_user</code>).
+  </div>
+
+  <h3>Cómo navegar el historial (viewer)</h3>
+  <ol class="steps">
+    <li>Al ingresar, el sidebar de la izquierda mostrará todos tus chats anteriores.</li>
+    <li>Haz clic en cualquier chat para leer el historial completo de mensajes.</li>
+    <li>Puedes desplazarte por los mensajes pero no puedes agregar nuevos.</li>
+  </ol>
+</div>
+
+<!-- ═══════════════════════════
+     6. MANUAL ADMIN
+════════════════════════════ -->
+<div class="section" id="manual-ad">
+  <h2>6. Manual del Administrador <span class="role-badge role-ad">admin</span></h2>
+  <p>El rol <code>admin</code> tiene acceso completo al sistema, incluyendo el <strong>Panel de Administración</strong> para gestionar usuarios y roles.</p>
+
+  <h3 id="admin-panel">6.1 Panel de Administración</h3>
+  <p>Para acceder al panel: en la cabecera del chat, haz clic en la pestaña <strong>"Administración"</strong> (visible solo para admins).</p>
+
+  <div class="fig">
+    <div class="fig-label">Figura 7 — Panel de Administración de Usuarios</div>
+    <div class="mk-admin-root">
+      <div class="mk-admin-header">⚙️ Administración de Usuarios</div>
+      <div class="mk-admin-toolbar">
+        <input class="mk-admin-search" placeholder="🔍 Buscar por nombre o email…" readonly/>
+        <select class="mk-admin-filter">
+          <option>Todos los roles</option>
+          <option>assistant_user</option>
+          <option>viewer</option>
+          <option>admin</option>
+        </select>
+      </div>
+      <!-- Row 1 -->
+      <div class="mk-user-row">
+        <div class="mk-user-avatar">AG</div>
+        <div class="mk-user-info">
+          <div class="mk-user-name">Ana García</div>
+          <div class="mk-user-email">ana.garcia@gmail.com</div>
+        </div>
+        <span class="role-badge role-au" style="font-size:.72rem">assistant_user</span>
+        <select class="mk-role-select"><option>assistant_user</option><option>viewer</option><option>admin</option></select>
+        <button class="mk-btn-apply">Aplicar</button>
+        <button class="mk-btn-del">Eliminar</button>
+      </div>
+      <!-- Row 2 -->
+      <div class="mk-user-row">
+        <div class="mk-user-avatar" style="background:#1b5e20">CR</div>
+        <div class="mk-user-info">
+          <div class="mk-user-name">Carlos Ramos</div>
+          <div class="mk-user-email">carlos.ramos@empresa.com</div>
+        </div>
+        <span class="role-badge role-vi" style="font-size:.72rem">viewer</span>
+        <select class="mk-role-select"><option>viewer</option><option>assistant_user</option><option>admin</option></select>
+        <button class="mk-btn-apply">Aplicar</button>
+        <button class="mk-btn-del">Eliminar</button>
+      </div>
+      <!-- Row 3 -->
+      <div class="mk-user-row">
+        <div class="mk-user-avatar" style="background:#880e4f">OZ</div>
+        <div class="mk-user-info">
+          <div class="mk-user-name">Oscar Zelada Pozo</div>
+          <div class="mk-user-email">oszeladap@gmail.com</div>
+        </div>
+        <span class="role-badge role-ad" style="font-size:.72rem">admin</span>
+        <select class="mk-role-select"><option>admin</option><option>assistant_user</option><option>viewer</option></select>
+        <button class="mk-btn-apply" disabled style="opacity:.4">Aplicar</button>
+        <button class="mk-btn-del" disabled style="opacity:.4">Eliminar</button>
+      </div>
+      <!-- Row sin rol -->
+      <div class="mk-user-row">
+        <div class="mk-user-avatar" style="background:#546e7a">MR</div>
+        <div class="mk-user-info">
+          <div class="mk-user-name">María Rojas</div>
+          <div class="mk-user-email">maria.rojas@correo.com</div>
+        </div>
+        <span class="role-badge" style="background:#eceff1;color:#546e7a;border:1px solid #ccc;font-size:.72rem">sin rol</span>
+        <select class="mk-role-select"><option value="">— sin rol —</option><option>assistant_user</option><option>viewer</option><option>admin</option></select>
+        <button class="mk-btn-apply">Aplicar</button>
+        <button class="mk-btn-del">Eliminar</button>
+      </div>
+      <div class="mk-toast">✅ Rol actualizado correctamente.</div>
+    </div>
+    <p class="fig-caption">El panel muestra todos los usuarios registrados en Firebase con su rol actual, buscador, filtro por rol, selector de nuevo rol y botones de acción.</p>
+  </div>
+
+  <h3 id="admin-roles">6.2 Asignar y cambiar roles</h3>
+  <ol class="steps">
+    <li>En el Panel de Administración, localiza al usuario (usa el buscador o el filtro).</li>
+    <li>Haz clic en el desplegable de rol que aparece junto al usuario.</li>
+    <li>Selecciona el rol deseado: <code>assistant_user</code>, <code>viewer</code> o <code>admin</code>.</li>
+    <li>Haz clic en el botón <strong>"Aplicar"</strong>.</li>
+    <li>Aparecerá un mensaje de confirmación verde: <em>"Rol actualizado correctamente"</em>.</li>
+    <li>El cambio es efectivo inmediatamente; el usuario verá el nuevo acceso en su próxima recarga.</li>
+  </ol>
+
+  <div class="warn"><b>⚠️ No puedes cambiarte el rol a ti mismo</b>Si intentas modificar tu propio rol, el sistema bloqueará la acción para evitar que un admin accidentalmente pierda sus privilegios.</div>
+
+  <h3 id="admin-delete">6.3 Eliminar usuarios</h3>
+  <ol class="steps">
+    <li>Localiza al usuario a eliminar en el Panel de Administración.</li>
+    <li>Haz clic en el botón rojo <strong>"Eliminar"</strong>.</li>
+    <li>Aparecerá un diálogo de confirmación: <em>"¿Eliminar definitivamente la cuenta de [email]?"</em></li>
+    <li>Haz clic en <strong>Aceptar</strong> para confirmar.</li>
+    <li>La cuenta Firebase Auth y todos los datos en Firestore (chats, perfil) del usuario serán eliminados permanentemente.</li>
+  </ol>
+
+  <div class="warn"><b>⚠️ Acción irreversible</b>La eliminación de un usuario borra también todo su historial de chats y perfil de Firestore. Esta acción no se puede deshacer.</div>
+
+  <h3>Asignación de roles desde línea de comandos (alternativa técnica)</h3>
+  <p>Si no tienes acceso al panel web, el administrador del servidor puede asignar roles directamente:</p>
+  <div style="background:#1a2332;color:#90caf9;padding:12px 16px;border-radius:8px;font-family:monospace;font-size:.83rem;margin:.8rem 0">
+    cd backend<br/>
+    python assign_role.py &lt;uid_firebase&gt; assistant_user<br/>
+    <span style="color:#546e7a"># Ejemplo: python assign_role.py abc123xyz assistant_user</span>
+  </div>
+</div>
+
+<!-- ═══════════════════════════
+     7. EJEMPLOS
+════════════════════════════ -->
+<div class="section" id="ejemplos">
+  <h2>7. Ejemplos de Consultas</h2>
+  <p>El asistente entiende lenguaje natural. A continuación, ejemplos de preguntas que generan respuestas completas y bien estructuradas:</p>
+
+  <h3>✈️ Transporte Aéreo</h3>
+  <table>
+    <tr><th>Consulta</th><th>Qué obtendrás</th></tr>
+    <tr><td>"¿Cuáles son los vuelos de Lima a Cusco este fin de semana? ¿Cuánto cuestan en LATAM y Sky?"</td><td>Tabla comparativa de aerolíneas con tarifas actualizadas</td></tr>
+    <tr><td>"¿Hay vuelos directos de Lima a Iquitos? ¿Cuál es la aerolínea más económica?"</td><td>Disponibilidad de vuelos directos y precios mínimos</td></tr>
+    <tr><td>"¿Cuánto cuesta un vuelo Lima-Arequipa para el próximo mes?"</td><td>Rango de precios con comparativa de operadores</td></tr>
+  </table>
+
+  <h3>🚌 Transporte Terrestre</h3>
+  <table>
+    <tr><th>Consulta</th><th>Qué obtendrás</th></tr>
+    <tr><td>"¿Cuánto cuesta el bus de Lima a Arequipa con Cruz del Sur?"</td><td>Tarifas, horarios y categorías de servicio</td></tr>
+    <tr><td>"¿Cómo llego de Cusco a Puno en bus? ¿Cuánto tiempo tarda?"</td><td>Ruta, tiempo estimado y operadores disponibles</td></tr>
+    <tr><td>"¿Cuál es la diferencia entre bus económico y bus cama Lima-Trujillo?"</td><td>Comparativa de comodidades y precios</td></tr>
+  </table>
+
+  <h3>🏨 Hospedaje</h3>
+  <table>
+    <tr><th>Consulta</th><th>Qué obtendrás</th></tr>
+    <tr><td>"¿Cuánto cuesta un hostal económico en el centro de Cusco?"</td><td>Rango de precios por noche con opciones</td></tr>
+    <tr><td>"¿Hay alojamientos cerca de Machu Picchu en Aguas Calientes?"</td><td>Opciones con precios en S/. y distancias</td></tr>
+  </table>
+
+  <h3>🍽️ Gastronomía y Transporte Local</h3>
+  <table>
+    <tr><th>Consulta</th><th>Qué obtendrás</th></tr>
+    <tr><td>"¿Qué restaurantes económicos hay en Miraflores? ¿Cuánto sale el menú?"</td><td>Lista de restaurantes con precios del menú del día</td></tr>
+    <tr><td>"¿Cuánto cobran los taxis en Lima del aeropuerto al centro? ¿Y Uber?"</td><td>Tarifas aproximadas de taxi y Uber</td></tr>
+  </table>
+
+  <h3>🌟 Consultas combinadas (mejor resultado)</h3>
+  <div style="background:#f5f7fa;border:1px solid var(--border);border-radius:8px;padding:14px 18px;font-size:.88rem;color:#1a2332;margin:.6rem 0">
+    <p style="margin-bottom:8px"><strong>"Voy a viajar de Lima a Cusco el próximo mes. ¿Cuánto me costaría el vuelo, un hostal económico y las entradas a Machu Picchu? Incluye el clima esperado."</strong></p>
+    <p style="color:#546e7a;font-size:.82rem">→ Respuesta con vuelos comparados, opciones de hospedaje, costos de Machu Picchu, clima de Cusco en julio y galería de fotos</p>
+  </div>
+
+  <div style="background:#f5f7fa;border:1px solid var(--border);border-radius:8px;padding:14px 18px;font-size:.88rem;color:#1a2332;margin:.6rem 0">
+    <p style="margin-bottom:8px"><strong>"¿Qué debo saber antes de viajar a Cusco? Consejos sobre el soroche, documentos necesarios, cambio de moneda y seguridad."</strong></p>
+    <p style="color:#546e7a;font-size:.82rem">→ Guía práctica completa con consejos de salud, documentos, moneda local y recomendaciones de seguridad</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════
+     8. SOLUCIÓN DE PROBLEMAS
+════════════════════════════ -->
+<div class="section" id="problemas">
+  <h2>8. Solución de Problemas</h2>
+
+  <table>
+    <tr><th>Problema</th><th>Causa probable</th><th>Solución</th></tr>
+    <tr>
+      <td>El chat no responde / botón "Enviar" sin efecto</td>
+      <td>Error de red o servidor en mantenimiento</td>
+      <td>Actualizar la página (F5) y esperar 30 segundos. Verificar conexión a internet.</td>
+    </tr>
+    <tr>
+      <td>No aparecen imágenes en la galería</td>
+      <td>Tavily no encontró imágenes para ese destino</td>
+      <td>Normal en destinos muy pequeños. Intenta con el nombre completo de la ciudad.</td>
+    </tr>
+    <tr>
+      <td>Error 403 al iniciar sesión</td>
+      <td>Cuenta sin rol asignado</td>
+      <td>Contactar al administrador del sistema para que asigne el rol <code>assistant_user</code>.</td>
+    </tr>
+    <tr>
+      <td>El PDF no se descarga</td>
+      <td>Bloqueador de pop-ups activo</td>
+      <td>Permitir pop-ups para el sitio en la configuración del navegador.</td>
+    </tr>
+    <tr>
+      <td>La galería tarda mucho (>15s)</td>
+      <td>Primera consulta del destino (sin caché)</td>
+      <td>Normal en la primera consulta. Las siguientes consultas al mismo destino son rápidas (~1-2s).</td>
+    </tr>
+    <tr>
+      <td>Respuesta genérica sin precios específicos</td>
+      <td>Consulta sin suficiente contexto</td>
+      <td>Incluir ciudad de origen, destino, fecha aproximada y tipo de servicio en la pregunta.</td>
+    </tr>
+    <tr>
+      <td>El chat anterior no aparece en el sidebar</td>
+      <td>Error de sincronización con Firestore</td>
+      <td>Actualizar la página. Los chats se guardan automáticamente y se recuperan al recargar.</td>
+    </tr>
+    <tr>
+      <td>El mapa de ruta en el PDF no aparece</td>
+      <td>Ciudad no tiene ruta configurada o timeout de OSRM</td>
+      <td>El sistema tiene rutas configuradas para las 28 ciudades principales del Perú. Destinos menores pueden no tener mapa.</td>
+    </tr>
+  </table>
+
+  <h3>Ciudades con mapa de ruta disponible</h3>
+  <p>El PDF Detallado incluye mapa de ruta (Plaza de Armas → Atracción principal) para las siguientes ciudades:</p>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;margin:.6rem 0">
+    <span class="mk-pref-chip">Lima</span><span class="mk-pref-chip">Cusco</span>
+    <span class="mk-pref-chip">Arequipa</span><span class="mk-pref-chip">Trujillo</span>
+    <span class="mk-pref-chip">Chiclayo</span><span class="mk-pref-chip">Iquitos</span>
+    <span class="mk-pref-chip">Piura</span><span class="mk-pref-chip">Huancayo</span>
+    <span class="mk-pref-chip">Puno</span><span class="mk-pref-chip">Cajamarca</span>
+    <span class="mk-pref-chip">Tacna</span><span class="mk-pref-chip">Ica</span>
+    <span class="mk-pref-chip">Ayacucho</span><span class="mk-pref-chip">Huaraz</span>
+    <span class="mk-pref-chip">Tarapoto</span><span class="mk-pref-chip">Moquegua</span>
+    <span class="mk-pref-chip">Tumbes</span><span class="mk-pref-chip">Paracas</span>
+    <span class="mk-pref-chip">Nazca</span><span class="mk-pref-chip">Machu Picchu</span>
+    <span class="mk-pref-chip">Juliaca</span><span class="mk-pref-chip">Chimbote</span>
+    <span class="mk-pref-chip">Pucallpa</span><span class="mk-pref-chip">Sullana</span>
+    <span class="mk-pref-chip">Huánuco</span><span class="mk-pref-chip">Abancay</span>
+    <span class="mk-pref-chip">Tingo María</span><span class="mk-pref-chip">Puerto Maldonado</span>
+  </div>
+
+  <h3>Soporte</h3>
+  <table>
+    <tr><th>Canal</th><th>Detalle</th></tr>
+    <tr><td>Desarrollador</td><td>Oscar Zelada Pozo — oszeladap@gmail.com</td></tr>
+    <tr><td>Repositorio GitHub</td><td><code>github.com/oszeladap/chatbot-infraestructura</code></td></tr>
+    <tr><td>URL de producción</td><td><code>https://chatbot-transporte-peru-production.up.railway.app</code></td></tr>
+    <tr><td>Documentación técnica</td><td><code>CASO_DE_USO.md</code> — UML 2.5 / IEEE 830 / RUP</td></tr>
+  </table>
+</div>
+
+<!-- Footer -->
+<div style="text-align:center;color:#78909c;font-size:.76rem;margin-top:12px;padding:16px">
+  Sistema Inteligente de Viajes de Perú — v2.4 · Junio 2026 · Oscar Zelada Pozo<br/>
+  React 18 · FastAPI · Mistral AI · Tavily · Firebase · Firestore · Railway
+</div>
+
+</div><!-- /wrap -->
+</body>
+</html>
